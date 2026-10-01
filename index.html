@@ -12,70 +12,108 @@
 <section class="sensor-panel"><div class="panelhead compact"><h2>หลักฐานจากเซนเซอร์</h2><span class="tag">จำลอง</span></div><label class="sr-only" for="sensor-select">เลือกเซนเซอร์ควัน</label><select id="sensor-select"></select><div class="sensor-reading"><div><span>PM2.5</span><strong id="pm">—</strong><small>µg/m³</small></div><div><span>CO</span><strong id="co">—</strong><small>ppm</small></div></div><p id="sensor-status" class="sensorstatus">—</p><div class="chart-heading"><span>แนวโน้ม PM2.5 จำลอง</span><span id="chart-range">10 นาทีล่าสุด</span></div><svg id="chart" viewBox="0 0 360 120" role="img" aria-label="แนวโน้มค่าฝุ่น PM2.5 จำลองช่วง 10 นาที"><path id="chart-grid"/><path id="chart-area"/><path id="chart-line"/><g id="chart-labels"/></svg><p id="sensor-location" class="tiny"></p></section>
 </aside></div>
 
-<section class="network-plan" id="network-plan">
+<section class="network-plan network-v4" id="network-plan">
   <div class="panelhead plan-head">
     <div>
-      <p class="eyebrow">SENSOR NETWORK PLAN</p>
-      <h2>แผนติดตั้งเซนเซอร์ · ครบทั้ง 3 พื้นที่ hotspot</h2>
-      <span class="muted">H-01 กลาง · H-02 เหนือ · H-03 ตะวันตก — วงวางแผนรัศมี 2 กม. ต่อพื้นที่</span>
+      <p class="eyebrow">SENSOR NETWORK PLAN · VERSION 4</p>
+      <h2>DEM-driven sensor placement · Terrain & Risk Network</h2>
+      <span class="muted">คัดเลือก candidate จาก Copernicus DEM GLO-90 + historical hotspot + wind observability + network geometry</span>
     </div>
     <div class="plan-actions">
-      <label for="plan-zone" class="sr-only">เลือกพื้นที่ hotspot</label>
-      <select id="plan-zone"><option value="H-01">H-01 · พื้นที่กลาง</option><option value="H-02">H-02 · พื้นที่เหนือ</option><option value="H-03">H-03 · พื้นที่ตะวันตก</option></select>
-      <button id="plan-focus">โฟกัสพื้นที่ 2 กม.</button>
+      <label for="plan-zone" class="sr-only">เลือก planning sector</label>
+      <select id="plan-zone">
+        <option value="ALL">ทุก planning sector</option>
+        <option value="Z-N">Z-N · Northern terrain</option>
+        <option value="Z-C">Z-C · Central corridor</option>
+        <option value="Z-W">Z-W · Western inflow</option>
+      </select>
+      <button id="plan-focus">โฟกัส sector</button>
       <button id="plan-fit">ดูทั้งหมด</button>
     </div>
   </div>
 
   <div class="plan-metrics" aria-label="สรุปเครือข่ายเซนเซอร์">
-    <div><span>Sensor เดิม</span><strong>3</strong><small>คงพิกัดเดิม ใช้เทียบกับโซนที่ใกล้ที่สุด</small></div>
-    <div><span>Sensor เพิ่ม</span><strong>21</strong><small>พื้นที่ละ 7 จุด · N1–N21</small></div>
-    <div><span>Core deployment</span><strong>9</strong><small>พื้นที่ละ 3 จุด · กลาง / เหนือ / ตะวันตก</small></div>
-    <div><span>Expansion</span><strong>12</strong><small>พื้นที่ละ 4 จุด สำหรับเสริมแผน</small></div>
+    <div><span>Candidate grid</span><strong id="plan-candidate-count">100</strong><small>ประเมินภูมิประเทศและความเหมาะสมก่อนคัดเลือก</small></div>
+    <div><span>Selected network</span><strong id="plan-selected-count">21</strong><small>ไม่ได้กำหนด 7 จุดต่อ hotspot แบบเดิม</small></div>
+    <div><span>Core deployment</span><strong id="plan-core-count">—</strong><small>คะแนนรวมสูงและเติมข้อมูลเครือข่ายได้มาก</small></div>
+    <div><span>DEM status</span><strong id="plan-dem-metric">…</strong><small id="plan-dem-note">กำลังโหลด Copernicus GLO-90</small></div>
   </div>
 
-  <div class="plan-zone-summary" id="plan-zone-summary" aria-label="แผนแต่ละพื้นที่ hotspot"></div>
-  <p class="plan-scope-note">มีแผนเสนอครบ 3 พื้นที่ แต่ยังไม่ใช่การยืนยันพื้นที่ตรวจจับ: วง 2 กม. เป็นขอบเขตวางแผน ตำแหน่งใหม่ N8–N21 สร้างจากทิศและระยะรอบ hotspot ยังไม่ได้ยืนยัน DEM/ภูมิประเทศ ลมจริง หรือสัญญาณสื่อสารภาคสนาม</p>
+  <div class="plan-layerbar" aria-label="ชั้นข้อมูลวางแผน">
+    <label><input id="plan-heat" type="checkbox" checked> Sensor suitability</label>
+    <label><input id="plan-blind" type="checkbox" checked> Network blind spots</label>
+    <label><input id="plan-source" type="checkbox" checked> Probable source demo</label>
+    <span>Historical hotspot ใช้เพื่อ replay/validation ไม่ใช่ศูนย์กลางวาง sensor</span>
+  </div>
+
+  <div class="plan-zone-summary" id="plan-zone-summary" aria-label="planning sectors และ historical replay"></div>
+  <p class="plan-scope-note" id="plan-scope-note">Version 4 จะดึง elevation จาก Copernicus DEM GLO-90 ผ่าน Open-Meteo Elevation API แล้วคำนวณ slope/aspect proxy ระดับ planning. คะแนน Access และ Communication ยังไม่รวมจนกว่าจะมี road/radio survey; candidate ทั้งหมดไม่ใช่พิกัดก่อสร้าง</p>
+
   <div class="plan-layout">
     <div class="plan-map-card">
-      <p id="plan-map-status" class="plan-map-status" role="status" aria-live="polite" data-state="loading">กำลังเตรียมพื้นแผนที่…</p>
-      <div id="network-map" role="img" aria-label="แผนที่ภูมิประเทศแสดง sensor เดิม hotspot และ sensor เสนอใหม่ N1 ถึง N21 ใน 3 พื้นที่"></div>
+      <p id="plan-map-status" class="plan-map-status" role="status" aria-live="polite" data-state="loading">กำลังเตรียมแผนที่และ DEM…</p>
+      <div id="network-map" role="img" aria-label="แผนที่ DEM-driven sensor suitability, blind spots, historical hotspots และ sensor candidates"></div>
       <div class="plan-legend">
         <span><i class="plan-dot existing"></i>Sensor เดิม</span>
-        <span><i class="plan-dot proposed"></i>Sensor เพิ่ม</span>
-        <span><i class="plan-dot hotspot"></i>Hotspot อ้างอิง</span>
-        <span><i class="plan-ring"></i>วงวางแผน 2 กม. × 3</span>
+        <span><i class="plan-dot proposed"></i>Selected candidate</span>
+        <span><i class="plan-dot hotspot"></i>Historical hotspot</span>
+        <span><i class="plan-dot heat"></i>Suitability grid</span>
+        <span><i class="plan-dot blind"></i>Geometry blind spot</span>
       </div>
     </div>
 
     <aside class="plan-detail" id="plan-detail">
-      <div class="section-label"><span class="status green" id="plan-phase">Core</span><span class="muted" id="plan-kind">Candidate point</span></div>
-      <h2 id="plan-title">N1 · East / ENE Ridge Watch</h2>
-      <p id="plan-role">ดักลมและควันก่อนข้ามสันเขาเข้าสู่พื้นที่หลัก</p>
+      <div class="section-label"><span class="status green" id="plan-phase">Core</span><span class="muted" id="plan-kind">Fusion Node</span></div>
+      <h2 id="plan-title">กำลังคำนวณ candidate…</h2>
+      <p id="plan-role">ใช้ DEM + wind + historical risk + network geometry เพื่อเลือกตำแหน่ง</p>
+
+      <div class="plan-score-total">
+        <span>Placement score</span>
+        <strong id="plan-score-total">—</strong>
+        <small id="plan-score-confidence">planning model</small>
+      </div>
+      <div class="plan-score-grid">
+        <div><span>Terrain</span><b id="score-terrain">—</b></div>
+        <div><span>Smoke interception</span><b id="score-smoke">—</b></div>
+        <div><span>Historical risk</span><b id="score-risk">—</b></div>
+        <div><span>Coverage gain</span><b id="score-coverage">—</b></div>
+      </div>
+
       <dl class="plan-dl">
-        <div><dt>ตำแหน่ง</dt><dd id="plan-terrain">สันเขา / upper slope ฝั่ง E/NE</dd></div>
-        <div><dt>ชุดวัด</dt><dd id="plan-package">Wind speed + Wind direction + T/RH + PM2.5/PM10</dd></div>
-        <div><dt>พิกัด candidate</dt><dd id="plan-coord">19.408233, 101.103530</dd></div>
-        <div><dt>ระยะจากศูนย์กลาง</dt><dd id="plan-distance">1.45 กม.</dd></div>
+        <div><dt>Functional role</dt><dd id="plan-functional-role">—</dd></div>
+        <div><dt>Terrain interpretation</dt><dd id="plan-terrain">—</dd></div>
+        <div><dt>Sensor package</dt><dd id="plan-package">—</dd></div>
+        <div><dt>Candidate coordinate</dt><dd id="plan-coord">—</dd></div>
+        <div><dt>DEM / slope / aspect</dt><dd id="plan-distance">—</dd></div>
+        <div><dt>Field checks still required</dt><dd id="plan-field-check">ถนนเข้าถึง · solar exposure · radio link · จุดติดตั้งจริง</dd></div>
       </dl>
-      <p class="plan-note">พิกัด N1–N21 เป็น candidate เบื้องต้น ต้องสำรวจ DEM/contour การเปิดรับลม การเข้าถึง และทดสอบสื่อสารก่อนเลือกจุดติดตั้งจริง โดยเฉพาะ N8–N21 ยังไม่ยืนยันภูมิประเทศ</p>
+      <p class="plan-note">คะแนนเป็น decision-support สำหรับ Demo ไม่ใช่ผล survey. “Blind spot” ในหน้านี้หมายถึงช่องว่างเชิงเรขาคณิตระหว่าง node ไม่ใช่การยืนยันว่าตรวจควันไม่ได้</p>
     </aside>
+  </div>
+
+  <div class="plan-replay" id="plan-replay">
+    <div>
+      <p class="eyebrow">HISTORICAL REPLAY</p>
+      <h3>ทดสอบ network กับ H-01 / H-02 / H-03</h3>
+      <p>คำนวณ synthetic first-detection จากตำแหน่ง candidate และลมอ้างอิง 261° → 81°. ใช้เปรียบเทียบ configuration เท่านั้น ไม่ใช่เวลาตรวจพบจริงในอดีต</p>
+    </div>
+    <div id="plan-replay-cards" class="plan-replay-cards"></div>
   </div>
 
   <div class="plan-table-wrap">
     <table class="plan-table">
-      <thead><tr><th>จุด</th><th>พื้นที่</th><th>Phase</th><th>ตำแหน่ง / สถานะสำรวจ</th><th>หน้าที่</th><th>ชุด Sensor</th><th></th></tr></thead>
+      <thead><tr><th>จุด</th><th>Sector</th><th>Role</th><th>Phase</th><th>Score</th><th>Terrain</th><th>Sensor package</th><th></th></tr></thead>
       <tbody id="plan-table-body"></tbody>
     </table>
   </div>
 
   <div class="plan-footnote">
-    <b>Existing sensor reference:</b>
-    จุดเดิมที่ยืนยันพิกัดแล้ว 2 จุดคือ 19.440792, 101.070164 และ 19.451642, 101.055952
-    ส่วนจุดเดิมที่ 3 แสดงเป็นตำแหน่งประมาณจากแผนที่ที่แนบมา จนกว่าจะได้รับพิกัดจริง
+    <b>Data / limitations:</b>
+    DEM ใช้ Copernicus DEM 2021 GLO-90 ผ่าน Open-Meteo Elevation API (90 m). Historical hotspot H-01–H-03 ใช้เป็น validation events เท่านั้น.
+    Land-cover/road/radio ยังไม่ได้ใช้คำนวณ score ใน Version 4; ต้องเพิ่มก่อนออกแบบก่อสร้างจริง. Existing sensor 3 จุดคงไว้เป็น reference โดย EX-03 ยังเป็นพิกัดประมาณ.
   </div>
 </section>
 <section class="bottom-grid"><article class="tablepanel"><div class="panelhead"><h2>จุดที่ต้องตรวจสอบก่อน</h2><span id="table-count" class="muted">—</span></div><div class="tablewrap"><table><thead><tr><th>เซนเซอร์</th><th>สถานะ</th><th>PM2.5</th><th>CO</th><th>อัปเดต</th><th></th></tr></thead><tbody id="sensor-table"></tbody></table></div></article><article class="eventpanel"><div class="panelhead"><h2>ลำดับเหตุการณ์</h2><span class="tag">เดโม</span></div><ol id="events"></ol></article></section>
-<details class="method"><summary>ข้อมูลที่ใช้และขอบเขตของเดโม</summary><p>แผนที่ playback ด้านบนใช้ Copernicus GLO-30, ESA WorldCover 2021 และ OpenStreetMap จากงานเดิม ตำแหน่ง Weather 100 และ AQ 100 เป็นจุดเสนอสำหรับเดโม ค่าควัน สถานะการสื่อสาร และลำดับเหตุการณ์สังเคราะห์ทั้งหมด ไม่ได้เชื่อมอุปกรณ์จริง</p><p>ส่วน Sensor Network Plan วางแผนครบ hotspot 3 พื้นที่: H-01 กลางใช้ N1–N7 เดิม, H-02 เหนือเสนอ N8–N14, H-03 ตะวันตกเสนอ N15–N21 พร้อมวงวางแผนรัศมี 2 กม. ต่อพื้นที่ ตำแหน่ง N8–N21 มาจากทิศและระยะทางเชิงเรขาคณิต ยังไม่ได้ประเมิน DEM/contour หรือลมหน้างาน จุดเหล่านี้ยังไม่ใช่พิกัดก่อสร้าง ต้องตรวจ DEM/contour หน้างาน การเปิดรับลม ถนนเข้าถึง และความปลอดภัยก่อนติดตั้งจริง</p><p>ลม 2.18 m/s จาก 261° มาจาก ERA5 วันที่ 15 มี.ค. 2025 เวลา 14:00 น. เป็นข้อมูลระดับภูมิภาคที่นำมาใช้คงที่ในฉากนี้ ไม่ใช่ลมปัจจุบันหรือการวัดครบ 100 สถานี กติกาควันผิดปกติ: ΔPM2.5 &gt;25 µg/m³ และ ΔCO &gt;0.2 ppm เทียบฐานสมมติ 15 µg/m³ / 0.15 ppm ไม่ใช่เกณฑ์สุขภาพหรือเกณฑ์ปฏิบัติการที่สอบเทียบแล้ว</p><p>โซนสีส้มเป็นกรอบห้อมกลุ่ม AQ ที่ผิดปกติ ไม่ใช่การย้อนคำนวณจุดต้นเพลิง แนวไฟลาม 15/30/60 นาทีเป็นแบบจำลองอย่างง่ายที่ยังไม่สอบเทียบ จึงไม่แสดงเวลาปลอดภัย เส้นทางเข้าดับไฟ หรือค่าความรุนแรงของไฟ</p><p>ข้อมูลเก่าหรือขาดการติดต่อแสดงเป็นสีเทาและไม่นับเป็นหลักฐานยืนยันควัน ต้องแยก “ไม่มีสัญญาณผิดปกติ” ออกจาก “ไม่มีข้อมูล” การรับทราบอยู่เฉพาะหน้านี้และรีเซ็ตเมื่อเปลี่ยนฉาก ยังไม่มีบันทึกเหตุส่วนกลางหรือการแจ้งเตือนจริง</p><p>FIRMS snapshot เดิม 16–23 ก.ย. 2026 ไม่มีจุดในรัศมี 25 กม. จึงไม่นำมาปนกับฉากย้อนหลังนี้ แผนเชื่อมข้อมูลจริง: sensor → LoRaWAN/cellular → MQTT/API → ตรวจคุณภาพและอายุข้อมูล → dashboard ผ่าน SSE/WebSocket โดยต้องเพิ่มบริการรับข้อมูลก่อน</p><p>© OpenStreetMap contributors · © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium · Copernicus DEM · Open-Meteo / ERA5</p><a href="https://registry.opendata.aws/copernicus-dem/">Copernicus DEM</a> · <a href="https://esa-worldcover.org/en/data-access">WorldCover</a> · <a href="https://www.openstreetmap.org/copyright">OSM</a> · <a href="https://open-meteo.com/en/docs/historical-weather-api">ERA5 / Open-Meteo</a></details>
-<footer><span>FOREST WATCH · หน้าจอสาธิตสำหรับเจ้าหน้าที่</span><span id="run-status">พักการเล่น · ปรับเวลาเพื่อสำรวจเหตุการณ์</span></footer><div id="toast" role="status" aria-live="polite" hidden></div></main><script src="data.js"></script><script src="app.js"></script><script src="vendor/leaflet/leaflet.js" crossorigin=""></script><script src="plan.js?v=three-zones-2"></script></body></html>
+<details class="method"><summary>ข้อมูลที่ใช้และขอบเขตของเดโม</summary><p>แผนที่ playback ด้านบนใช้ Copernicus GLO-30, ESA WorldCover 2021 และ OpenStreetMap จากงานเดิม ตำแหน่ง Weather 100 และ AQ 100 เป็นจุดเสนอสำหรับเดโม ค่าควัน สถานะการสื่อสาร และลำดับเหตุการณ์สังเคราะห์ทั้งหมด ไม่ได้เชื่อมอุปกรณ์จริง</p><p>Sensor Network Plan Version 4 เลิกวาง N8–N21 แบบ bearing/radius รอบ hotspot และใช้ candidate grid ที่ประเมินด้วย Copernicus DEM GLO-90, slope/aspect proxy, historical hotspot proximity, wind-based smoke interception และ network geometry แทน Hotspot H-01–H-03 ถูกใช้เป็น historical replay/validation events ไม่ใช่ศูนย์กลาง network. คะแนนยังไม่รวม road/access และ radio survey จึงยังไม่ใช่พิกัดก่อสร้าง</p><p>ลม 2.18 m/s จาก 261° มาจาก ERA5 วันที่ 15 มี.ค. 2025 เวลา 14:00 น. เป็นข้อมูลระดับภูมิภาคที่นำมาใช้คงที่ในฉากนี้ ไม่ใช่ลมปัจจุบันหรือการวัดครบ 100 สถานี กติกาควันผิดปกติ: ΔPM2.5 &gt;25 µg/m³ และ ΔCO &gt;0.2 ppm เทียบฐานสมมติ 15 µg/m³ / 0.15 ppm ไม่ใช่เกณฑ์สุขภาพหรือเกณฑ์ปฏิบัติการที่สอบเทียบแล้ว</p><p>โซนสีส้มเป็นกรอบห้อมกลุ่ม AQ ที่ผิดปกติ ไม่ใช่การย้อนคำนวณจุดต้นเพลิง แนวไฟลาม 15/30/60 นาทีเป็นแบบจำลองอย่างง่ายที่ยังไม่สอบเทียบ จึงไม่แสดงเวลาปลอดภัย เส้นทางเข้าดับไฟ หรือค่าความรุนแรงของไฟ</p><p>ข้อมูลเก่าหรือขาดการติดต่อแสดงเป็นสีเทาและไม่นับเป็นหลักฐานยืนยันควัน ต้องแยก “ไม่มีสัญญาณผิดปกติ” ออกจาก “ไม่มีข้อมูล” การรับทราบอยู่เฉพาะหน้านี้และรีเซ็ตเมื่อเปลี่ยนฉาก ยังไม่มีบันทึกเหตุส่วนกลางหรือการแจ้งเตือนจริง</p><p>FIRMS snapshot เดิม 16–23 ก.ย. 2026 ไม่มีจุดในรัศมี 25 กม. จึงไม่นำมาปนกับฉากย้อนหลังนี้ แผนเชื่อมข้อมูลจริง: sensor → LoRaWAN/cellular → MQTT/API → ตรวจคุณภาพและอายุข้อมูล → dashboard ผ่าน SSE/WebSocket โดยต้องเพิ่มบริการรับข้อมูลก่อน</p><p>© OpenStreetMap contributors · © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium · Copernicus DEM · Open-Meteo / ERA5</p><a href="https://registry.opendata.aws/copernicus-dem/">Copernicus DEM</a> · <a href="https://esa-worldcover.org/en/data-access">WorldCover</a> · <a href="https://www.openstreetmap.org/copyright">OSM</a> · <a href="https://open-meteo.com/en/docs/historical-weather-api">ERA5 / Open-Meteo</a></details>
+<footer><span>FOREST WATCH · หน้าจอสาธิตสำหรับเจ้าหน้าที่</span><span id="run-status">พักการเล่น · ปรับเวลาเพื่อสำรวจเหตุการณ์</span></footer><div id="toast" role="status" aria-live="polite" hidden></div></main><script src="data.js"></script><script src="app.js"></script><script src="vendor/leaflet/leaflet.js" crossorigin=""></script><script src="plan.js?v=dem-network-v4"></script></body></html>
 

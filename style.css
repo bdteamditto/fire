@@ -59,3 +59,44 @@
 .plan-zone-card p{margin:4px 0;font-size:13px}.plan-zone-card small{display:block;color:var(--muted);line-height:1.5}
 .plan-zone-card button{margin-top:8px;font-size:12px}.plan-scope-note{margin:0;padding:8px 18px 14px;font-size:12px;color:#69531d;background:#fff8e9}
 @media(max-width:850px){.plan-zone-summary{grid-template-columns:1fr}.plan-actions{flex-wrap:wrap}.plan-actions select{width:100%}}
+
+
+/* Version 4 · DEM-driven sensor placement */
+.network-v4 .plan-head h2{margin-bottom:2px}
+.plan-layerbar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 18px;border-bottom:1px solid var(--line);background:#fbfcfb;font-size:12px;color:#596b62}
+.plan-layerbar label{display:flex;align-items:center;gap:6px;font-weight:600;color:#294b3d}
+.plan-layerbar input{accent-color:#315f4b}
+.plan-layerbar span{margin-left:auto;color:#7b857f}
+.plan-dot.heat{background:#d5a642;border:2px solid #8a6418}
+.plan-dot.blind{background:#f4d9d2;border:2px dashed #a65a49}
+.plan-score-total{display:flex;align-items:baseline;gap:8px;padding:13px 0 8px;border-top:1px solid var(--line)}
+.plan-score-total span{font-size:12px;color:var(--muted)}
+.plan-score-total strong{font-size:32px;color:var(--forest);font-variant-numeric:tabular-nums}
+.plan-score-total small{margin-left:auto;font-size:11px;color:#748078}
+.plan-score-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 14px}
+.plan-score-grid>div{background:#f0f5f2;border:1px solid #e0e8e3;border-radius:7px;padding:8px 10px}
+.plan-score-grid span{display:block;font-size:10px;color:#77847c;text-transform:uppercase;letter-spacing:.03em}
+.plan-score-grid b{font-size:17px;color:#264b3d;font-variant-numeric:tabular-nums}
+.plan-replay{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;padding:16px 18px;border-top:1px solid var(--line);background:#f7f9f8}
+.plan-replay h3{margin:2px 0 6px;font-size:17px}
+.plan-replay p{margin:0;font-size:12px;line-height:1.55;color:#66756d}
+.plan-replay-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.plan-replay-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 11px}
+.plan-replay-card b{display:block;font-size:13px;color:#294b3d}
+.plan-replay-card strong{display:block;margin:3px 0;font-size:17px;color:#8b4d1c}
+.plan-replay-card small{display:block;font-size:11px;line-height:1.45;color:#78847d}
+.map-sensor.proposed{border-color:#fff;box-shadow:0 2px 8px #10281e66}
+.map-sensor.role-FU{background:#2e6f5a}
+.map-sensor.role-RW{background:#477aa0}
+.map-sensor.role-VW{background:#6c7d9c}
+.map-sensor.role-BW{background:#8b6e48}
+.map-sensor.role-AQ{background:#b65b33}
+.map-sensor.role-RS{background:#584f80}
+.plan-heat-point{mix-blend-mode:multiply}
+.plan-source-label{background:#fff8e8;border:1px solid #ba8140;border-radius:5px;padding:3px 6px;color:#6f4517;font-size:11px;box-shadow:none}
+.plan-zone-card .zone-score{display:inline-block;margin-top:5px;padding:2px 6px;border-radius:4px;background:#eef3f0;color:#486057;font-size:11px}
+.network-v4 .plan-table{min-width:1100px}
+.network-v4 .plan-table td:nth-child(5){font-weight:700;color:#2a5744;font-variant-numeric:tabular-nums}
+.network-v4 .plan-scope-note{background:#fff9e9;color:#66531f;border-bottom:1px solid #eadfbf}
+@media(max-width:1000px){.plan-replay{grid-template-columns:1fr}.plan-replay-cards{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:700px){.plan-layerbar span{margin-left:0;width:100%}.plan-replay-cards{grid-template-columns:1fr}.plan-score-grid{grid-template-columns:1fr 1fr}}
