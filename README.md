@@ -190,10 +190,3 @@ Suppression mode เปิด slope screening, road/track/path, mapped support p
 **ข้อจำกัดสำคัญ:** OSM เป็น volunteered geographic data; road/path/support/barrier อาจไม่ครบหรือไม่เป็นปัจจุบัน. 3D terrain และ slope screen เป็น planning support เท่านั้น. Route ไม่ได้รวม live fire perimeter, smoke visibility, falling trees, bridge load, road closure, recent landslide, field command, crew capability หรือ tactical safety. ต้อง field-verify และใช้ SOP/incident command ก่อนการใช้งานปฏิบัติการจริง.
 
 Data attribution: OpenStreetMap contributors, MapLibre GL JS, maplibre-contour, AWS elevation tiles / Terrarium DEM, Esri World Imagery, OpenTopoMap, Copernicus DEM / Open-Meteo Elevation, ESA WorldCover 2021.
-
-### 2D Access Planner และเซ็นเซอร์เดิม
-
-- แผนที่ Budget Optimizer 2D และ Operational 3D แสดงเซ็นเซอร์เดิม EX-01–EX-03 สีเขียวพร้อมชื่อ จุดเดิมไม่ถูกเพิ่มเป็นอุปกรณ์ใหม่ใน BOQ; EX-03 ยังเป็นพิกัดประมาณจากแผนที่เดิม
-- 2D กำหนดจุดไฟและจุดเริ่มได้ด้วยการคลิกแผนที่หรือกรอก Latitude/Longitude แล้วคำนวณ Access/Egress ได้ ใช้เป้าหมาย จุดเริ่ม profile และผลคำนวณร่วมกับ 3D
-- แสดงช่วงเชื่อมจากจุดเริ่มที่กรอกไปยังถนนและจากถนนไปยังเป้าหมายเป็นเส้นนอกทาง พร้อมรวมระยะนี้ในยอดรวม การเปลี่ยนจุดหรือกด Auto ล้างเส้นทางเก่าทั้งสองแผนที่
-- OSM มี endpoint สำรองและเวลารอจำกัด หากโหลดไม่ได้จะใช้ผลที่เคยโหลดสำเร็จสำหรับพื้นที่เดียวกันใน browser พร้อมระบุวันเวลาข้อมูล; ถ้าไม่มีข้อมูลสำรองจะแสดงว่าเส้นทางยังคำนวณไม่ได้
