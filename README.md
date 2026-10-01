@@ -40,7 +40,18 @@
 - Hotspot อ้างอิง 3 จุดใช้พิกัดจากภาพ VIIRS ที่แนบมา
 - Proposed sensor N1–N7 แสดงเป็นสีน้ำเงินภายในวง 2 กม.
 - N1–N3 เป็น Core deployment; N4–N7 เป็น Expansion
-- แผนที่ planning ใช้ OpenTopoMap / OpenStreetMap ผ่าน Leaflet เพื่อดู contour และบริบทภูมิประเทศ
+- แผนที่ planning ใช้ Esri Topographic ผ่าน HTTPS เป็นค่าเริ่มต้น เลือก OpenTopoMap (contour) หรือ OpenStreetMap ได้
 - พิกัด N1–N7 เป็น candidate planning coordinates ไม่ใช่พิกัดก่อสร้าง ต้องตรวจ ridge / saddle / drainage, ความโล่งรับลม, ถนนเข้าถึง และความปลอดภัยหน้างานก่อนติดตั้งจริง
 
 ไฟล์ที่เพิ่ม: `plan.js` และส่วน UI/CSS ใน `index.html` / `style.css`
+
+
+### Basemap recovery
+
+Leaflet 1.9.4 (including CSS, control images and its license) is served locally from `vendor/leaflet/`; no CDN is required. Esri Topographic is the default HTTPS basemap. A tile error or a 12-second timeout without a successful tile switches either terrain provider to OSM standard at https://tile.openstreetmap.org/{z}/{x}/{y}.png. OSM failures show an accessible Thai status message; vectors, the 2 km circle, sensor details and the table remain available. Provider switching resets status so a recovered connection can load again. OpenTopoMap is optional and uses maxNativeZoom 17 with overzoom to 19.
+
+GitHub Pages and all tile URLs use HTTPS. No CSP is defined in index.html; if adding a CSP or using a filtering proxy, allow images from server.arcgisonline.com, *.tile.opentopomap.org and tile.openstreetmap.org (plus same-origin Leaflet assets and data URLs). Do not use a no-referrer policy for OSM requests. Esri topography is not a substitute for the optional contour layer or a surveyed DEM.
+
+The map must call setView(center, 14) before adding the circle and reading circle.getBounds(). Without an initial view Leaflet defers layer attachment, so getBounds throws while accessing layerPointToLatLng and initialization stops on a gray map.
+
+Validated in a headless Edge browser: live Esri tiles, simulated provider failure → OSM, blocked Esri + OSM with visible status, hanging Esri requests → OSM after 12 seconds, missing Leaflet with working N1–N7 table, and a 390 px mobile viewport. Marker counts remain 7 proposed, 3 existing, 3 hotspots; focus/all buttons and sensor details work. No runtime errors in the corrected app.
