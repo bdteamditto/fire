@@ -127,3 +127,66 @@ Fusion package ใน Version 5 คิดจาก RK120-01 + RK330-01 + RK300-0
 - ถ้า DEM จาก Version 4 ไม่พร้อม: optimizer ยังทำงานได้ แต่ confidence ลดลงตามข้อมูลที่ขาด
 
 Data attribution: ESA WorldCover 2021 v200 (CC-BY 4.0), OpenStreetMap contributors, Copernicus DEM / Open-Meteo Elevation API.
+
+
+## Version 6 — 3D Operational Terrain & Access
+
+Version 6 เพิ่มแผนที่ปฏิบัติการ 3 มิติสำหรับอ่านภูมิประเทศและเส้นทางเข้า–ออกพื้นที่ โดยยังคง Network Plan และ Budget Optimizer เดิมไว้เป็นชั้นวางแผน/จัดงบ.
+
+### 3D terrain stack
+
+- **MapLibre GL JS** สำหรับ WebGL 3D terrain
+- **Terrarium DEM tiles** จาก AWS elevation tiles เพื่อยกภูมิประเทศ
+- **maplibre-contour** สร้าง contour vector tiles ฝั่ง browser จาก DEM เดียวกัน
+- Satellite base = Esri World Imagery
+- Topographic alternative = OpenTopoMap
+- Hillshade + contour + terrain exaggeration ปรับได้ 1.0–2.2×
+
+### Access & suppression layers
+
+ข้อมูล OSM/Overpass ขยายจาก Version 5 ให้รวม:
+
+- highway / service / unclassified / residential
+- forest track / path / footway / steps
+- surface / smoothness / tracktype / access / motor_vehicle / oneway
+- barriers
+- fire station
+- fire hydrant
+- spring / mapped water body
+- helipad / heliport
+- parking / mapped staging candidate
+- turning circle
+- communication mast/tower
+
+ถนนถูกแยก visual class เป็น major road / road / track / path และ access=private/no ที่พบใน OSM ถูก highlight แยกเพื่อไม่ให้ routing ใช้เป็นเส้นทางปกติ.
+
+### Access / Egress routing
+
+Access Planner รองรับ 3 planning profiles:
+
+- รถทั่วไป
+- 4x4 / forest track
+- เดินเท้า
+
+ผู้ใช้เลือก target ได้จาก historical hotspot, selected sensor site หรือคลิก custom fire point บนแผนที่. จุดเริ่มสามารถใช้ Auto staging (จุดบน main road ที่เชื่อม network และใช้เวลาเดินทางต่ำ) หรือคลิกกำหนดเอง.
+
+Routing เป็น graph search ภายใน browser จาก OSM road geometry:
+
+- คำนวณ **Access route** จาก staging/main road → target access point
+- คำนวณ **Egress route** จาก target access point → main road แยกจากกัน เพื่อรองรับ oneway ที่ map ไว้
+- ช่วงสุดท้ายจาก road/track network ถึง target แสดงเป็น **off-road approach**
+- แสดง route distance, estimated travel time, off-road distance, elevation gain และ max grade จาก sampled elevation
+
+ความเร็วเป็น planning assumptions ตาม road class/profile ไม่ใช่เวลาถึงเหตุจริง.
+
+### Route-based access score
+
+Optimizer Version 5 ถูกอัปเกรดให้ access score ไม่ได้ใช้เพียงระยะตรงถึงถนนอีกต่อไป. ระบบสร้าง OSM access graph และใช้ generalized network distance จาก candidate ไปยัง main-access road ร่วมกับ off-road distance เพื่อปรับคะแนนตำแหน่ง sensor.
+
+### Suppression mode
+
+Suppression mode เปิด slope screening, road/track/path, mapped support point และ operational route พร้อมกัน เพื่อให้ดูภูมิประเทศกับการเข้าถึงในภาพเดียว.
+
+**ข้อจำกัดสำคัญ:** OSM เป็น volunteered geographic data; road/path/support/barrier อาจไม่ครบหรือไม่เป็นปัจจุบัน. 3D terrain และ slope screen เป็น planning support เท่านั้น. Route ไม่ได้รวม live fire perimeter, smoke visibility, falling trees, bridge load, road closure, recent landslide, field command, crew capability หรือ tactical safety. ต้อง field-verify และใช้ SOP/incident command ก่อนการใช้งานปฏิบัติการจริง.
+
+Data attribution: OpenStreetMap contributors, MapLibre GL JS, maplibre-contour, AWS elevation tiles / Terrarium DEM, Esri World Imagery, OpenTopoMap, Copernicus DEM / Open-Meteo Elevation, ESA WorldCover 2021.
