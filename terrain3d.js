@@ -248,14 +248,13 @@
     if(!window.maplibregl){setStatus('โหลด MapLibre ไม่สำเร็จ · กรุณารีเฟรชหรือเช็กการบล็อก CDN','error');return;}
     const el=document.getElementById('operational-3d-map');if(!el)return;
     const demUrl='https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png';
-    const contourReady=!!window.mlcontour;
+    let contourReady=!!window.mlcontour;
     let dem=null,terrainTiles=[demUrl],contourTiles=null;
-    if(contourReady){
+    try { if(contourReady){
       dem=new mlcontour.DemSource({url:demUrl,encoding:'terrarium',maxzoom:13,worker:true,cacheSize:140,timeoutMs:10000});
       dem.setupMaplibre(maplibregl);app.demSource=dem;
-      terrainTiles=[dem.sharedDemProtocolUrl];
       contourTiles=[dem.contourProtocolUrl({multiplier:1,thresholds:{10:[100,500],11:[100,500],12:[50,200],13:[25,100],14:[20,100],15:[10,50]},elevationKey:'ele',levelKey:'level',contourLayer:'contours'})];
-    }
+    } } catch (err) { contourReady=false; contourTiles=null; }
     const b=state.data.bounds,c=state.data.center;
     const style={
       version:8,
@@ -264,6 +263,7 @@
         satellite:{type:'raster',tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],tileSize:256,maxzoom:19,attribution:'Esri World Imagery'},
         topo:{type:'raster',tiles:['https://a.tile.opentopomap.org/{z}/{x}/{y}.png'],tileSize:256,maxzoom:17,attribution:'OpenTopoMap / OpenStreetMap contributors'},
         'terrain-dem':{type:'raster-dem',encoding:'terrarium',tiles:terrainTiles,maxzoom:13,tileSize:256},
+        'hillshade-dem':{type:'raster-dem',encoding:'terrarium',tiles:[demUrl],maxzoom:13,tileSize:256},
         ...(contourReady?{contours:{type:'vector',tiles:contourTiles,maxzoom:15}}:{}),
         roads:{type:'geojson',data:lineFC(state.osm.segments||[])},
         support:{type:'geojson',data:supportFC(state.osm.support||[])},
@@ -280,7 +280,7 @@
       layers:[
         {id:'satellite',type:'raster',source:'satellite',paint:{'raster-saturation':-.12,'raster-contrast':.08,'raster-brightness-max':.93}},
         {id:'topo',type:'raster',source:'topo',layout:{visibility:'none'},paint:{'raster-opacity':.95}},
-        {id:'hillshade',type:'hillshade',source:'terrain-dem',paint:{'hillshade-exaggeration':.48,'hillshade-shadow-color':'#27342c','hillshade-highlight-color':'#f4eedf','hillshade-accent-color':'#566c5c'}},
+        {id:'hillshade',type:'hillshade',source:'hillshade-dem',paint:{'hillshade-exaggeration':.48,'hillshade-shadow-color':'#27342c','hillshade-highlight-color':'#f4eedf','hillshade-accent-color':'#566c5c'}},
         {id:'slope-screen',type:'fill',source:'slope-screen',layout:{visibility:'none'},paint:{'fill-color':['interpolate',['linear'],['get','slope'],15,'#f2e6a6',25,'#dc954d',35,'#b84a36',45,'#7d2633'],'fill-opacity':['interpolate',['linear'],['get','slope'],15,0,25,.16,35,.30,45,.42]}},
         ...(contourReady?[{id:'contour-minor',type:'line',source:'contours','source-layer':'contours',paint:{'line-color':'rgba(241,232,204,.62)','line-width':['match',['get','level'],1,1.25,.55]}}]:[]),
         {id:'roads-casing',type:'line',source:'roads',filter:['in',['get','kind'],['literal',['major','road']]],paint:{'line-color':'rgba(30,35,32,.82)','line-width':['match',['get','kind'],'major',6,4]}},
@@ -310,7 +310,7 @@
     map.on('load',()=>{
       map.setTerrain({source:'terrain-dem',exaggeration:1.5});
       setStatus(contourReady?'3D terrain พร้อม · Satellite + hillshade + contour + OSM access network':'3D terrain พร้อม · contour engine ไม่พร้อม จึงแสดง terrain + hillshade + access network แทน','ready');
-      updateOperationalData(state);
+      updateOperationalData(app.state);
       bindMapInteractions();
       applyMode('terrain');
     });
@@ -454,6 +454,12 @@
     if(!state)return;
     if(!app.map)init(state);else updateOperationalData(state);
   }
+  function startTerrain(data){
+    if(!data || app.state)return;
+    handle({data,candidates:data.candidates||[],osm:{segments:[],support:[],barriers:[]},result:{nodes:[],gateways:[]},osmOK:false});
+  }
+  if(window.ForestWatchNetworkV4)startTerrain(window.ForestWatchNetworkV4);
+  window.addEventListener('forestwatch:v4-ready',e=>startTerrain(e.detail));
   if(window.ForestWatchOptimizerV5State)handle(window.ForestWatchOptimizerV5State);
   window.addEventListener('forestwatch:v5-ready',e=>handle(e.detail));
 })();
