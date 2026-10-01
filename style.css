@@ -50,3 +50,6 @@
 @media(max-width:1100px){.plan-layout{grid-template-columns:minmax(0,1fr) 300px}.plan-metrics>div{padding:12px}}
 @media(max-width:850px){.plan-metrics{grid-template-columns:repeat(2,1fr)}.plan-metrics>div:nth-child(2){border-right:0}.plan-metrics>div:nth-child(-n+2){border-bottom:1px solid var(--line)}.plan-layout{grid-template-columns:1fr}.plan-map-card{border-right:0;border-bottom:1px solid var(--line)}#network-map{height:500px}.plan-detail{padding:17px}}
 @media(max-width:550px){.plan-head{align-items:flex-start}.plan-actions{width:100%}.plan-actions button{flex:1}.plan-metrics>div{padding:10px}.plan-metrics strong{font-size:24px}#network-map{height:420px}.plan-legend{right:8px;left:8px;bottom:8px}.plan-detail h2{font-size:19px}}
+
+.plan-map-status{margin:0;padding:9px 14px;background:#eef5f0;color:#234c3e;font-size:12px;line-height:1.5;border-bottom:1px solid var(--line)}
+.plan-map-status[data-state="error"]{background:#fff0d9;color:#7a420c}

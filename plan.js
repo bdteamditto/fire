@@ -82,7 +82,15 @@
     }
   }
 
+  const mapStatus = document.getElementById('plan-map-status');
+  function setMapStatus(message, state = 'loading') {
+    if (!mapStatus) return;
+    mapStatus.textContent = message;
+    mapStatus.dataset.state = state;
+  }
+
   if (!window.L || !document.getElementById('network-map')) {
+    setMapStatus('โหลดระบบแผนที่ไม่ได้ กรุณารีเฟรชหน้า — รายการ N1–N7 ยังใช้งานได้', 'error');
     const el = document.getElementById('network-map');
     if (el) el.innerHTML = '<div class="plan-map-fallback">โหลดแผนที่ออนไลน์ไม่ได้ แต่รายการ N1–N7 ยังใช้งานได้ด้านล่าง</div>';
     document.querySelectorAll('[data-plan]').forEach(btn => btn.onclick = () => setDetail(proposed.find(p => p.id === btn.dataset.plan)));
@@ -90,16 +98,104 @@
     return;
   }
 
-  const map = L.map('network-map', {zoomControl:true, scrollWheelZoom:true});
-  const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-    maxZoom:17,
-    attribution:'Map data © OpenStreetMap contributors · Map style © OpenTopoMap'
-  }).addTo(map);
-  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom:19,
-    attribution:'© OpenStreetMap contributors'
+  const map = L.map('network-map', {zoomControl:true, scrollWheelZoom:true}).setView(center, 14);
+  // HTTPS providers require no API key; OSM is the independent fallback.
+  const terrain = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+    maxNativeZoom:19, maxZoom:19,
+    attribution:'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, USGS, NGA, EPA, NPS'
   });
-  L.control.layers({'ภูมิประเทศ / contour':topo,'OpenStreetMap':osm}, null, {collapsed:true}).addTo(map);
+  const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    maxNativeZoom:17, maxZoom:19,
+    attribution:'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &middot; Map style &copy; OpenTopoMap (CC-BY-SA)'
+  });
+  const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxNativeZoom:19, maxZoom:19,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  });
+  const names = new Map([[terrain, 'Esri Topographic'], [topo, 'OpenTopoMap'], [osm, 'OpenStreetMap']]);
+  let activeLayer = null;
+  let loadedTiles = 0;
+  let failedTiles = 0;
+  let loadTimer;
+  let fallbackTimer;
+  let usingFallback = false;
+
+  function blockedMessage() {
+    setMapStatus('โหลดพื้นแผนที่ภายนอกไม่ได้หรือได้ไม่ครบ อาจถูกเครือข่าย/เบราว์เซอร์บล็อก หรือผู้ให้บริการขัดข้อง — จุดเซนเซอร์ hotspot และวง 2 กม. ยังใช้งานได้ ลองเปลี่ยนพื้นแผนที่หรือรีเฟรชหน้า', 'error');
+  }
+
+  function fallbackToOSM(layer) {
+    if (layer !== activeLayer || fallbackTimer) return;
+    if (layer === osm) {
+      blockedMessage();
+      return;
+    }
+    setMapStatus('โหลด ' + names.get(layer) + ' ไม่ได้ กำลังสลับไป OpenStreetMap…', 'loading');
+    // Defer removal until Leaflet finishes the current tile event.
+    fallbackTimer = setTimeout(() => {
+      fallbackTimer = null;
+      if (layer !== activeLayer || !map.hasLayer(layer)) return;
+      usingFallback = true;
+      map.removeLayer(layer);
+      osm.addTo(map);
+    }, 0);
+  }
+
+  function watchLoading(layer) {
+    clearTimeout(loadTimer);
+    loadedTiles = 0;
+    failedTiles = 0;
+    setMapStatus('กำลังโหลดพื้นแผนที่ ' + names.get(layer) + '…', 'loading');
+    loadTimer = setTimeout(() => {
+      if (activeLayer !== layer || !map.hasLayer(layer)) return;
+      if (!loadedTiles) fallbackToOSM(layer);
+      else setMapStatus('พื้นแผนที่โหลดได้บางส่วน แต่บางภาพยังไม่ตอบกลับ — ลองเปลี่ยนพื้นแผนที่หรือรีเฟรชหน้า', 'error');
+    }, 12000);
+  }
+
+  for (const layer of names.keys()) {
+    layer.on('add', () => {
+      activeLayer = layer;
+      if (layer !== osm) usingFallback = false;
+      watchLoading(layer);
+    });
+    layer.on('remove', () => {
+      if (activeLayer !== layer) return;
+      clearTimeout(loadTimer);
+      clearTimeout(fallbackTimer);
+      fallbackTimer = null;
+      activeLayer = null;
+    });
+    layer.on('loading', () => {
+      if (activeLayer === layer) watchLoading(layer);
+    });
+    layer.on('tileload', () => {
+      if (activeLayer === layer) loadedTiles++;
+    });
+    layer.on('tileerror', () => {
+      if (activeLayer !== layer) return;
+      failedTiles++;
+      fallbackToOSM(layer);
+    });
+    layer.on('load', () => {
+      if (activeLayer !== layer) return;
+      clearTimeout(loadTimer);
+      if (failedTiles || !loadedTiles) fallbackToOSM(layer);
+      else setMapStatus('พื้นแผนที่ ' + names.get(layer) + ' พร้อมใช้งาน' + (usingFallback ? ' · ใช้แผนที่สำรอง เนื่องจากแผนที่เดิมโหลดไม่ได้' : ''), 'ready');
+    });
+  }
+  L.control.layers({
+    'ภูมิประเทศ / Esri':terrain,
+    'ภูมิประเทศ / contour (OpenTopoMap)':topo,
+    'OpenStreetMap':osm
+  }, null, {collapsed:true}).addTo(map);
+  terrain.addTo(map);
+  // Recalculate after the card changes size (mobile layouts / panel resizing).
+  if (window.ResizeObserver) {
+    const observer = new ResizeObserver(() => map.invalidateSize({pan:false}));
+    observer.observe(document.getElementById('network-map'));
+    map.once('unload', () => observer.disconnect());
+  }
 
   const localCircle = L.circle(center, {
     radius:2000,
