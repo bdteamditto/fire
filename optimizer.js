@@ -101,29 +101,109 @@
   }
 
   async function fetchOSM(bounds){
-    const bbox=[bounds.minLat,bounds.minLon,bounds.maxLat,bounds.maxLon].join(',');
-    const query='[out:json][timeout:30];('+
+    const padLat=(bounds.maxLat-bounds.minLat)*0.10,padLon=(bounds.maxLon-bounds.minLon)*0.10;
+    const bbox=[bounds.minLat-padLat,bounds.minLon-padLon,bounds.maxLat+padLat,bounds.maxLon+padLon].join(',');
+    const query='[out:json][timeout:35];('+
       'way["highway"]('+bbox+');'+
       'node["man_made"~"mast|tower"]('+bbox+');'+
       'node["tower:type"="communication"]('+bbox+');'+
+      'node["barrier"]('+bbox+');'+
+      'nwr["emergency"="fire_hydrant"]('+bbox+');'+
+      'nwr["natural"="spring"]('+bbox+');'+
+      'nwr["amenity"="fire_station"]('+bbox+');'+
+      'nwr["aeroway"~"helipad|heliport"]('+bbox+');'+
+      'way["natural"="water"]('+bbox+');'+
       ');out geom;';
     const endpoint='https://overpass-api.de/api/interpreter';
     const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:'data='+encodeURIComponent(query)});
     if(!res.ok)throw new Error('Overpass '+res.status);
-    const json=await res.json(),segments=[],masts=[];
+    const json=await res.json(),segments=[],masts=[],barriers=[],support=[];
+    const centroid=e=>{
+      if(Number.isFinite(e.lat)&&Number.isFinite(e.lon))return [e.lat,e.lon];
+      if(Array.isArray(e.geometry)&&e.geometry.length){
+        const pts=e.geometry.filter(g=>Number.isFinite(g.lat)&&Number.isFinite(g.lon));
+        if(pts.length)return [pts.reduce((a,b)=>a+b.lat,0)/pts.length,pts.reduce((a,b)=>a+b.lon,0)/pts.length];
+      }
+      return null;
+    };
     for(const e of json.elements||[]){
-      if(e.type==='way'&&e.tags?.highway&&Array.isArray(e.geometry)){
-        const hw=e.tags.highway,weight=HIGHWAY_WEIGHT[hw]||.65;
+      const tags=e.tags||{};
+      if(e.type==='way'&&tags.highway&&Array.isArray(e.geometry)){
+        const hw=tags.highway,weight=HIGHWAY_WEIGHT[hw]||.65;
+        const meta={
+          wayId:e.id,hw,weight,name:tags.name||tags.ref||'',
+          surface:tags.surface||'',smoothness:tags.smoothness||'',tracktype:tags.tracktype||'',
+          access:tags.access||'',motorVehicle:tags.motor_vehicle||tags.vehicle||'',oneway:tags.oneway||''
+        };
         for(let i=1;i<e.geometry.length;i++){
-          segments.push({a:[e.geometry[i-1].lat,e.geometry[i-1].lon],b:[e.geometry[i].lat,e.geometry[i].lon],hw,weight});
+          segments.push({...meta,a:[e.geometry[i-1].lat,e.geometry[i-1].lon],b:[e.geometry[i].lat,e.geometry[i].lon]});
         }
-      }else if(e.type==='node'&&(e.tags?.man_made==='mast'||e.tags?.man_made==='tower'||e.tags?.['tower:type']==='communication')){
-        masts.push({lat:e.lat,lon:e.lon,tags:e.tags||{}});
+        continue;
+      }
+      const c=centroid(e);
+      if(!c)continue;
+      if(tags.man_made==='mast'||tags.man_made==='tower'||tags['tower:type']==='communication'){
+        masts.push({lat:c[0],lon:c[1],tags});
+      }
+      if(tags.barrier)barriers.push({lat:c[0],lon:c[1],type:tags.barrier,access:tags.access||'',tags});
+      let kind=null;
+      if(tags.emergency==='fire_hydrant')kind='Fire hydrant';
+      else if(tags.natural==='spring')kind='Spring / water';
+      else if(tags.amenity==='fire_station')kind='Fire station';
+      else if(tags.aeroway==='helipad'||tags.aeroway==='heliport')kind='Helipad / heliport';
+      else if(tags.natural==='water')kind='Mapped water body';
+      if(kind)support.push({lat:c[0],lon:c[1],kind,name:tags.name||'',tags});
+    }
+    return {segments,masts,barriers,support};
+  }
+
+  class MinHeap{
+    constructor(){this.a=[];}
+    push(item){const a=this.a;a.push(item);let i=a.length-1;while(i>0){const p=(i-1)>>1;if(a[p][0]<=item[0])break;a[i]=a[p];i=p;}a[i]=item;}
+    pop(){const a=this.a;if(!a.length)return null;const root=a[0],last=a.pop();if(a.length){let i=0;while(true){let l=i*2+1,r=l+1;if(l>=a.length)break;let c=r<a.length&&a[r][0]<a[l][0]?r:l;if(a[c][0]>=last[0])break;a[i]=a[c];i=c;}a[i]=last;}return root;}
+    get size(){return this.a.length;}
+  }
+  function graphKey(p){return p[0].toFixed(6)+','+p[1].toFixed(6);}
+  function buildAccessGraph(segments){
+    const nodes=new Map();
+    const ensure=p=>{const k=graphKey(p);if(!nodes.has(k))nodes.set(k,{key:k,coord:p,edges:[],roadClasses:new Set()});return nodes.get(k);};
+    for(const s of segments){
+      const a=ensure(s.a),b=ensure(s.b),d=distanceKm(s.a,s.b),difficulty=1/Math.max(.28,s.weight||.65);
+      a.edges.push({to:b.key,cost:d*difficulty,km:d,hw:s.hw,seg:s});
+      b.edges.push({to:a.key,cost:d*difficulty,km:d,hw:s.hw,seg:s});
+      a.roadClasses.add(s.hw);b.roadClasses.add(s.hw);
+    }
+    return nodes;
+  }
+  function accessDistances(graph){
+    const dist=new Map(),heap=new MinHeap();
+    const primary=new Set(['motorway','trunk','primary','secondary','tertiary']);
+    for(const [k,n] of graph){
+      if([...n.roadClasses].some(x=>primary.has(x))){dist.set(k,0);heap.push([0,k]);}
+    }
+    while(heap.size){
+      const cur=heap.pop(),d=cur[0],k=cur[1];
+      if(d!==dist.get(k))continue;
+      const node=graph.get(k);
+      for(const e of node.edges){
+        const nd=d+e.cost;
+        if(nd<(dist.get(e.to)??Infinity)){dist.set(e.to,nd);heap.push([nd,e.to]);}
       }
     }
-    return {segments,masts};
+    return dist;
+  }
+  function nearestGraphNode(p,graph){
+    let best=null,bestD=Infinity;
+    for(const n of graph.values()){
+      const d=distanceKm([p.lat,p.lon],n.coord);
+      if(d<bestD){bestD=d;best=n;}
+    }
+    return {node:best,distanceKm:bestD};
   }
   function enrichAccess(candidates,osm){
+    const graph=buildAccessGraph(osm.segments),routeDist=accessDistances(graph);
+    osm.graphNodeCount=graph.size;
+    osm.mainAccessGraph=graph;
     for(const p of candidates){
       let best=Infinity,bestType='—';
       for(const s of osm.segments){
@@ -131,8 +211,13 @@
         const effective=d/Math.max(.25,s.weight);
         if(effective<best){best=effective;bestType=s.hw;}
       }
+      const near=nearestGraphNode(p,graph),networkKm=near.node?(routeDist.get(near.node.key)??Infinity):Infinity;
       p.roadDistanceKm=Number.isFinite(best)?best:null;p.roadType=bestType;
-      p.accessScore=Number.isFinite(best)?clamp(100*Math.exp(-best/0.85)):50;
+      p.offroadAccessKm=Number.isFinite(near.distanceKm)?near.distanceKm:null;
+      p.routeAccessKm=Number.isFinite(networkKm)?networkKm:null;
+      p.nearestAccessNode=near.node?near.node.coord:null;
+      const generalized=(Number.isFinite(near.distanceKm)?near.distanceKm*2.4:2)+(Number.isFinite(networkKm)?networkKm:4);
+      p.accessScore=clamp(100*Math.exp(-generalized/4.0));
       if(osm.masts.length){
         p.mastDistanceKm=Math.min(...osm.masts.map(m=>distanceKm([p.lat,p.lon],[m.lat,m.lon])));
         p.backhaulScore=clamp(100*Math.exp(-p.mastDistanceKm/3.5));
@@ -377,13 +462,13 @@
     status('opt-radio-status','รอข้อมูล candidate…');
     const candidates=data.candidates.map((p,i)=>({...p,index:i}));
     normalizeElevation(candidates);
-    let wcOK=false,osmOK=false,osm={segments:[],masts:[]};
+    let wcOK=false,osmOK=false,osm={segments:[],masts:[],barriers:[],support:[]};
     await Promise.all([
       enrichWorldCover(candidates).then(()=>{wcOK=true;status('opt-worldcover-status','WorldCover COG พร้อม · ใช้ class จริงใน optimizer','ready');}).catch(err=>{
         candidates.forEach(p=>{p.landcover=null;p.fuelScore=50;p.landcoverSiteScore=50;});
         status('opt-worldcover-status','WorldCover COG โหลดไม่ได้ · ใช้ค่า neutral 50 และไม่อ้างว่าเป็น land-cover analysis','error');
       }),
-      fetchOSM(data.bounds).then(x=>{osm=x;osmOK=true;enrichAccess(candidates,osm);status('opt-osm-status','OSM พร้อม · '+osm.segments.length.toLocaleString()+' road segments · '+osm.masts.length+' mapped mast/tower','ready');}).catch(err=>{
+      fetchOSM(data.bounds).then(x=>{osm=x;osmOK=true;enrichAccess(candidates,osm);status('opt-osm-status','OSM พร้อม · '+osm.segments.length.toLocaleString()+' road segments · '+(osm.graphNodeCount||0).toLocaleString()+' route nodes · '+osm.support.length+' support points','ready');}).catch(err=>{
         candidates.forEach(p=>{p.roadDistanceKm=null;p.roadType='—';p.accessScore=50;p.backhaulScore=45;});
         status('opt-osm-status','OSM/Overpass โหลดไม่ได้ · access score เป็น neutral 50','error');
       })
@@ -399,6 +484,9 @@
       const budgetPct=latest.budget?Math.round(latest.cost.total/latest.budget*100):0;
       setText('opt-budget-use',budgetPct+'% ของงบรวม VAT');
       root.dataset.ready='true';
+      const payload={data,candidates,osm,result:latest,wcOK,osmOK,prices:QUOTE_PRICES};
+      window.ForestWatchOptimizerV5State=payload;
+      window.dispatchEvent(new CustomEvent('forestwatch:v5-ready',{detail:payload}));
     }
     document.getElementById('opt-run')?.addEventListener('click',run);
     ['opt-budget','opt-radio-range','opt-gateway-cost','opt-install-cost','opt-objective'].forEach(id=>{
