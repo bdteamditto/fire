@@ -196,7 +196,7 @@
     return {gain,loss,maxGrade};
   }
 
-  const app={map:null,state:null,graph:null,profile:'4x4',manualStart:null,customTarget:null,pickMode:null,currentRoute:null,demSource:null};
+  const app={map:null,state:null,graph:null,profile:'4x4',manualStart:null,customTarget:null,pickMode:null,currentRoute:null,demSource:null,routeRevision:0};
 
   function setStatus(text,state='ready'){
     const el=document.getElementById('op-status');if(!el)return;el.textContent=text;el.dataset.state=state;
@@ -204,6 +204,53 @@
   function setText(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
   function sourceSet(id,data){const s=app.map?.getSource(id);if(s)s.setData(data);}
   function visible(id,on){if(app.map?.getLayer(id))app.map.setLayoutProperty(id,'visibility',on?'visible':'none');}
+  function clearCoordinateError(kind){
+    const error=document.getElementById('op-'+kind+'-coordinate-error');
+    if(error){error.textContent='';error.hidden=true;}
+    ['lat','lon'].forEach(axis=>document.getElementById('op-'+kind+'-'+axis)?.removeAttribute('aria-invalid'));
+  }
+  function writeCoordinates(kind,coord){
+    ['lat','lon'].forEach((axis,i)=>{
+      const field=document.getElementById('op-'+kind+'-'+axis);
+      if(field)field.value=coord?String(Number(coord[i].toFixed(6))):'';
+    });
+    clearCoordinateError(kind);
+  }
+  function readCoordinates(kind){
+    const fields=['lat','lon'].map(axis=>document.getElementById('op-'+kind+'-'+axis));
+    const values=fields.map(f=>f.value.trim()===''?NaN:Number(f.value));
+    const invalid=values.map((v,i)=>!Number.isFinite(v)||Math.abs(v)>(i===0?90:180));
+    clearCoordinateError(kind);
+    if(invalid.some(Boolean)){
+      const error=document.getElementById('op-'+kind+'-coordinate-error');
+      error.textContent='กรอกพิกัดให้ครบ: Latitude −90 ถึง 90 และ Longitude −180 ถึง 180 เป็นองศาทศนิยม';error.hidden=false;
+      fields.forEach((f,i)=>{if(invalid[i])f.setAttribute('aria-invalid','true');});
+      fields[invalid.indexOf(true)].focus();return null;
+    }
+    return values;
+  }
+  function clearRoute(){
+    app.routeRevision++;app.currentRoute=null;
+    ['route','egress','offroad','route-points'].forEach(id=>sourceSet(id,emptyFC()));
+    ['op-route-distance','op-route-time','op-egress-time','op-offroad-distance','op-elevation-gain','op-max-grade','op-route-profile','op-route-surface'].forEach(id=>setText(id,'—'));
+  }
+  function showChosenPoints(){
+    const target=currentTarget(),points=[];
+    if(app.manualStart)points.push({coord:app.manualStart,properties:{kind:'start'}});
+    if(target)points.push({coord:[target.lat,target.lon],properties:{kind:'target'}});
+    sourceSet('route-points',pointFC(points));
+  }
+  function setCoordinatePoint(kind,coord){
+    app.pickMode=null;clearRoute();writeCoordinates(kind,coord);
+    if(kind==='start'){
+      app.manualStart=coord;
+      setText('op-start-mode','Manual start · '+coord[0].toFixed(6)+', '+coord[1].toFixed(6));
+    }else{
+      app.customTarget=coord;document.getElementById('op-target').value='CUSTOM';
+    }
+    showChosenPoints();
+    setStatus(kind==='start'?'กำหนดพิกัดจุดเริ่มแล้ว · กดคำนวณเส้นทาง':'กำหนดพิกัดจุดไฟแล้ว · กดคำนวณเส้นทาง','ready');
+  }
   function currentTarget(){
     const sel=document.getElementById('op-target')?.value||'H-01';
     if(sel==='CUSTOM')return app.customTarget?{id:'Custom fire point',lat:app.customTarget[0],lon:app.customTarget[1],type:'fire'}:null;
@@ -225,11 +272,17 @@
     (app.state.result.nodes||[]).forEach((n,i)=>{
       const o=document.createElement('option');o.value='S'+String(i+1).padStart(2,'0');o.textContent=o.value+' · '+n.role+' site';sel.appendChild(o);
     });
-    const custom=document.createElement('option');custom.value='CUSTOM';custom.textContent='Custom fire point · คลิกกำหนดบนแผนที่';sel.appendChild(custom);
+    const custom=document.createElement('option');custom.value='CUSTOM';custom.textContent='Custom fire point · กรอกพิกัดหรือคลิกบนแผนที่';sel.appendChild(custom);
     if([...sel.options].some(o=>o.value===old))sel.value=old;
+    if(sel.value!==old){const target=currentTarget();writeCoordinates('target',target?[target.lat,target.lon]:null);}
   }
   function updateOperationalData(state){
+    const previousTarget=app.state?currentTarget():null;
     app.state=state;populateTargets();
+    const target=currentTarget();
+    if(previousTarget?.lat!==target?.lat || previousTarget?.lon!==target?.lon){
+      clearRoute();writeCoordinates('target',target?[target.lat,target.lon]:null);showChosenPoints();
+    }
     if(!app.map)return;
     sourceSet('roads',lineFC(state.osm.segments||[]));
     sourceSet('support',supportFC(state.osm.support||[]));
@@ -367,10 +420,10 @@
   function bindMapInteractions(){
     app.map.on('click',e=>{
       if(app.pickMode==='start'){
-        app.manualStart=[e.lngLat.lat,e.lngLat.lng];app.pickMode=null;setText('op-start-mode','Manual start · '+app.manualStart[0].toFixed(5)+', '+app.manualStart[1].toFixed(5));setStatus('กำหนดจุดเริ่มแล้ว · กดคำนวณเส้นทาง','ready');return;
+        setCoordinatePoint('start',[e.lngLat.lat,((e.lngLat.lng+180)%360+360)%360-180]);return;
       }
       if(app.pickMode==='target'){
-        app.customTarget=[e.lngLat.lat,e.lngLat.lng];app.pickMode=null;const sel=document.getElementById('op-target');if(sel)sel.value='CUSTOM';setStatus('กำหนดจุดเหตุบนแผนที่แล้ว · กดคำนวณเส้นทาง','ready');return;
+        setCoordinatePoint('target',[e.lngLat.lat,((e.lngLat.lng+180)%360+360)%360-180]);return;
       }
       popupFeature(e);
     });
@@ -379,6 +432,7 @@
   }
 
   async function calculateRoute(){
+    clearRoute();const revision=app.routeRevision;
     if(!app.state?.osmOK){setStatus('ไม่มี OSM routing graph จึงยังคำนวณ access route ไม่ได้','error');return;}
     const target=currentTarget();if(!target){setStatus('กรุณาเลือกหรือกำหนดจุดเป้าหมาย','error');return;}
     const profile=document.getElementById('op-profile')?.value||'4x4';app.profile=profile;
@@ -399,7 +453,7 @@
     }
     if(!route||route.coords.length<1){
       setStatus('หาเส้นทางเชื่อมต่อไม่ได้สำหรับ '+profile+' · ลอง 4x4 หรือเดินเท้า และตรวจ OSM/ภาคสนาม','error');
-      sourceSet('route',emptyFC());sourceSet('egress',emptyFC());sourceSet('offroad',emptyFC());return;
+      return;
     }
     const roadKm=route.edges.reduce((a,e)=>a+e.km,0),roadMin=route.edges.reduce((a,e)=>a+e.minutes,0);
     const last=route.coords[route.coords.length-1],offroadKm=distanceKm(last,[target.lat,target.lon]);
@@ -425,9 +479,10 @@
     setText('op-start-mode',app.manualStart?'Manual start · snap '+Math.round(startGap*1000)+' m':'Auto staging · nearest connected major road');
     try{
       const elev=await fetchElevations(fullCoords),stats=profileStats(elev);
+      if(revision!==app.routeRevision)return;
       setText('op-elevation-gain',stats.gain==null?'—':Math.round(stats.gain)+' m');
       setText('op-max-grade',stats.maxGrade==null?'—':fmt(stats.maxGrade)+'%');
-    }catch(err){setText('op-elevation-gain','—');setText('op-max-grade','—');}
+    }catch(err){if(revision!==app.routeRevision)return;setText('op-elevation-gain','—');setText('op-max-grade','—');}
     app.currentRoute={target,profile,route,roadKm,offroadKm};
     setStatus('เส้นทางพร้อม · เป็น planning route จาก OSM ไม่ใช่คำสั่งเข้าดับไฟหรือการรับรองสภาพถนนจริง','ready');
   }
@@ -440,11 +495,23 @@
       const x=Number(e.target.value);setText('op-exag-value',x.toFixed(1)+'×');if(app.map?.getSource('terrain-dem'))app.map.setTerrain({source:'terrain-dem',exaggeration:x});
     });
     document.getElementById('op-route')?.addEventListener('click',calculateRoute);
+    ['start','target'].forEach(kind=>{
+      document.getElementById('op-'+kind+'-coordinates')?.addEventListener('submit',e=>{
+        e.preventDefault();const coord=readCoordinates(kind);if(coord)setCoordinatePoint(kind,coord);
+      });
+      ['lat','lon'].forEach(axis=>document.getElementById('op-'+kind+'-'+axis)?.addEventListener('input',()=>clearCoordinateError(kind)));
+    });
     document.getElementById('op-pick-start')?.addEventListener('click',()=>{app.pickMode='start';setStatus('คลิกบนแผนที่เพื่อกำหนดจุดเริ่ม / staging','loading');});
-    document.getElementById('op-auto-start')?.addEventListener('click',()=>{app.manualStart=null;setText('op-start-mode','Auto staging · nearest connected major road');setStatus('กลับไปใช้ Auto staging','ready');});
+    document.getElementById('op-auto-start')?.addEventListener('click',()=>{app.manualStart=null;app.pickMode=null;writeCoordinates('start',null);clearRoute();showChosenPoints();setText('op-start-mode','Auto staging · nearest connected major road');setStatus('กลับไปใช้ Auto staging · กดคำนวณเส้นทาง','ready');});
     document.getElementById('op-pick-target')?.addEventListener('click',()=>{app.pickMode='target';setStatus('คลิกบนแผนที่เพื่อกำหนดจุดเหตุ / fire target','loading');});
-    document.getElementById('op-target')?.addEventListener('change',()=>{if(document.getElementById('op-target').value==='CUSTOM'&&!app.customTarget){app.pickMode='target';setStatus('คลิกบนแผนที่เพื่อกำหนด Custom fire point','loading');}});
-    document.getElementById('op-profile')?.addEventListener('change',()=>{if(app.currentRoute)calculateRoute();});
+    document.getElementById('op-target')?.addEventListener('change',()=>{
+      app.pickMode=null;clearRoute();const target=currentTarget();writeCoordinates('target',target?[target.lat,target.lon]:null);showChosenPoints();
+      setStatus(target?'เลือกเป้าหมายแล้ว · กดคำนวณเส้นทาง':'กรอกพิกัดจุดไฟแล้วกดใช้พิกัด หรือกดกำหนดจุดไฟบนแผนที่','ready');
+    });
+    document.getElementById('op-profile')?.addEventListener('change',()=>{
+      if(app.currentRoute)calculateRoute();
+      else{clearRoute();showChosenPoints();setStatus('เปลี่ยนรูปแบบการเดินทางแล้ว · กดคำนวณเส้นทาง','ready');}
+    });
   }
 
   function init(state){
