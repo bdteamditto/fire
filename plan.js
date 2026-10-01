@@ -304,9 +304,9 @@
   for (const circle of zoneCircles.values()) allBounds.extend(circle.getBounds());
   function focusLocal() {
     const circle = zoneCircles.get(zoneSelect?.value || 'H-01');
-    map.fitBounds(circle.getBounds(), {padding:[24,24]});
+    map.stop().fitBounds(circle.getBounds(), {padding:[24,24],animate:false});
   }
-  function fitAll() { map.fitBounds(allBounds.pad(0.06), {padding:[24,24]}); }
+  function fitAll() { map.stop().fitBounds(allBounds.pad(0.06), {padding:[24,24],animate:false}); }
   zoneSelect?.addEventListener('change',focusLocal);
   document.querySelectorAll('[data-zone]').forEach(btn => btn.addEventListener('click', () => {
     if (zoneSelect) zoneSelect.value = btn.dataset.zone;
