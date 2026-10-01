@@ -111,6 +111,8 @@
       'nwr["emergency"="fire_hydrant"]('+bbox+');'+
       'nwr["natural"="spring"]('+bbox+');'+
       'nwr["amenity"="fire_station"]('+bbox+');'+
+      'nwr["amenity"="parking"]('+bbox+');'+
+      'node["highway"="turning_circle"]('+bbox+');'+
       'nwr["aeroway"~"helipad|heliport"]('+bbox+');'+
       'way["natural"="water"]('+bbox+');'+
       ');out geom;';
@@ -150,6 +152,8 @@
       if(tags.emergency==='fire_hydrant')kind='Fire hydrant';
       else if(tags.natural==='spring')kind='Spring / water';
       else if(tags.amenity==='fire_station')kind='Fire station';
+      else if(tags.amenity==='parking')kind='Parking / staging candidate';
+      else if(tags.highway==='turning_circle')kind='Turning circle';
       else if(tags.aeroway==='helipad'||tags.aeroway==='heliport')kind='Helipad / heliport';
       else if(tags.natural==='water')kind='Mapped water body';
       if(kind)support.push({lat:c[0],lon:c[1],kind,name:tags.name||'',tags});
