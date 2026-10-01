@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="แดชบอร์ดสาธิตเฝ้าระวังไฟป่าสำหรับเจ้าหน้าที่ แผนที่ 200 เซนเซอร์และเหตุการณ์จำลอง ไม่ใช่ข้อมูลเตือนภัยจริง"><title>Forest Watch | ศูนย์เฝ้าระวังไฟป่า — DEMO</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b493b'/%3E%3Cpath d='M16 5L5 23h22Z' fill='%238edf8f'/%3E%3Cpath d='M16 18v10' stroke='white' stroke-width='3'/%3E%3C/svg%3E"><link rel="stylesheet" href="style.css"></head>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="แดชบอร์ดสาธิตเฝ้าระวังไฟป่าสำหรับเจ้าหน้าที่ แผนที่ 200 เซนเซอร์และเหตุการณ์จำลอง ไม่ใช่ข้อมูลเตือนภัยจริง"><title>Forest Watch | ศูนย์เฝ้าระวังไฟป่า — DEMO</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b493b'/%3E%3Cpath d='M16 5L5 23h22Z' fill='%238edf8f'/%3E%3Cpath d='M16 18v10' stroke='white' stroke-width='3'/%3E%3C/svg%3E"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""></head>
 <body><header class="topbar"><div class="brand"><span class="brandmark" aria-hidden="true">▲</span><div><b>FOREST WATCH</b><span>ศูนย์เฝ้าระวังไฟป่า · พื้นที่สาธิต 2 กม.</span></div></div><div class="headright"><span class="demotag">DEMO · ข้อมูลจำลอง</span><div class="clock"><strong id="clock">14:24:00</strong><span>15 มี.ค. 2025 · เวลาจำลอง</span></div></div></header>
 <main><section class="headline"><div><p class="eyebrow">ภาพรวมสถานการณ์</p><h1 id="headline">พบสัญญาณควันผิดปกติ</h1><p id="situation">กำลังเตรียมข้อมูลจำลอง…</p></div><div class="playback"><label for="scenario">สถานการณ์เดโม</label><select id="scenario"><option value="smoke">ควันผิดปกติในพื้นที่</option><option value="normal">สถานการณ์ปกติ</option><option value="outage">เซนเซอร์ขาดการติดต่อ</option></select><div class="playrow"><button id="play" class="primary">▶ เล่นเดโม</button><button id="restart" title="เริ่มสถานการณ์ใหม่">เริ่มใหม่</button><label for="speed" class="sr-only">ความเร็วเล่นเดโม</label><select id="speed"><option value="1">1 วินาที = 1 นาที</option><option value="0.25">1 วินาที = 15 วินาที</option></select></div></div></section>
 <section class="metrics" aria-label="สถานะสำคัญ"><article class="metric"><span>เหตุที่ต้องตรวจสอบ</span><div><strong id="incidentcount">1</strong><em>บริเวณ</em></div><small id="incidentnote">ยังไม่ยืนยันว่าเกิดไฟ</small></article><article class="metric"><span>เซนเซอร์ควันผิดปกติ</span><div><strong id="flagcount">3</strong><em>/ 100 ตัว</em></div><small id="peak">สูงสุด — µg/m³</small></article><article class="metric"><span>ทิศที่ลมพัดไป</span><div><strong>ตะวันออก</strong><em>2.18 m/s</em></div><small>จาก 261° → ไป 81° · ลมอ้างอิง ERA5</small></article><article class="metric"><span>เซนเซอร์ส่งข้อมูล</span><div><strong id="online">200</strong><em>/ 200 ตัว</em></div><small id="freshness">ข้อมูลจำลองรอบล่าสุดไม่เกิน 1 นาที</small></article></section>
-<div class="workspace"><section class="map-panel"><div class="panelhead"><div><h2>แผนที่สถานการณ์</h2><span class="muted">รัศมี 2 กม. · 19.279295, 97.934599</span></div><div class="maptools"><label for="basemap" class="sr-only">พื้นแผนที่</label><select id="basemap"><option value="terrain">ภูมิประเทศ</option><option value="landcover">พื้นที่ป่า / การใช้ที่ดิน</option></select><button id="zoom-in" aria-label="ขยายแผนที่">+</button><button id="zoom-out" aria-label="ย่อแผนที่">−</button><button id="fit">เต็มพื้นที่</button></div></div>
+<div class="workspace"><section class="map-panel"><div class="panelhead"><div><h2>แผนที่สถานการณ์</h2><span class="muted">ฉาก playback จำลองเดิม · ใช้ทดสอบ logic การเตือน</span></div><div class="maptools"><label for="basemap" class="sr-only">พื้นแผนที่</label><select id="basemap"><option value="terrain">ภูมิประเทศ</option><option value="landcover">พื้นที่ป่า / การใช้ที่ดิน</option></select><button id="zoom-in" aria-label="ขยายแผนที่">+</button><button id="zoom-out" aria-label="ย่อแผนที่">−</button><button id="fit">เต็มพื้นที่</button></div></div>
 <div class="mapstage"><svg id="map" viewBox="0 0 1000 1000" role="img" aria-label="แผนที่เซนเซอร์ แสดงจุดควันผิดปกติ และทิศทางลม"><defs><marker id="wind-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#183f4f"/></marker></defs><image id="raster" x="-100" y="-100" width="1200" height="1200"/><rect x="0" y="0" width="1000" height="1000" fill="#f8faf1" opacity=".13" pointer-events="none"/><g id="contours"/><g id="roads"/><circle cx="500" cy="500" r="400" fill="none" stroke="#28453f" stroke-width="2.5" stroke-dasharray="9 6"/><g id="zone"/><g id="forecast"/><g id="weather-points"/><g id="smoke-points"/><g id="gateway-points" visibility="hidden"/><g id="flags"/><circle id="selected" r="14" fill="none" stroke="#142d50" stroke-width="3" visibility="hidden"/><g id="maplabels"/></svg>
 <div class="north">N ↑</div><div class="map-caption" id="mapcaption">วงส้ม = กลุ่มสัญญาณผิดปกติ<br><small>ยังไม่ใช่ขอบเขตไฟหรือจุดต้นเพลิง</small></div><div class="scalebar"><i></i>500 ม.</div></div>
 <div class="maplegend"><span><i class="dot aq"></i>AQ/ควัน</span><span><i class="dot ws"></i>อากาศ</span><span><i class="dot warn"></i>ผิดปกติ</span><span><i class="dot offline"></i>ข้อมูลขาด</span><label><input id="showweather" type="checkbox" checked>แสดง Weather</label><label><input id="showforecast" type="checkbox">แนวลามสมมติ</label></div>
@@ -11,7 +11,66 @@
 <aside><section id="incident" class="incident-panel"><div class="section-label"><span id="severity" class="status amber">ต้องตรวจสอบ</span><span class="muted">เหตุจำลอง #001</span></div><h2 id="incidenttitle">ควันผิดปกติ · โซนตะวันตก</h2><p id="incidentdesc">พบสัญญาณจากหลายเซนเซอร์ใกล้กัน</p><div class="evidence"><div><span>หลักฐาน</span><b id="evidence-count">—</b></div><div><span>ความรุนแรงของไฟ</span><b>ยังประเมินไม่ได้</b></div><div><span>สถานะยืนยัน</span><b id="ackstate">รอตรวจสอบ</b></div></div><div class="next-step"><b>สิ่งที่ควรทำต่อ</b><p id="actiontext">ตรวจสอบภาพหรือข้อมูลภาคสนามเพื่อยืนยันเหตุ พร้อมติดตามเซนเซอร์ด้านตะวันออก</p></div><button id="ack" class="primary wide">รับทราบเหตุ (เดโม)</button><p class="tiny">บันทึกเฉพาะในหน้านี้ ไม่ส่งคำสั่งหรือข้อความถึงหน่วยงาน</p></section>
 <section class="sensor-panel"><div class="panelhead compact"><h2>หลักฐานจากเซนเซอร์</h2><span class="tag">จำลอง</span></div><label class="sr-only" for="sensor-select">เลือกเซนเซอร์ควัน</label><select id="sensor-select"></select><div class="sensor-reading"><div><span>PM2.5</span><strong id="pm">—</strong><small>µg/m³</small></div><div><span>CO</span><strong id="co">—</strong><small>ppm</small></div></div><p id="sensor-status" class="sensorstatus">—</p><div class="chart-heading"><span>แนวโน้ม PM2.5 จำลอง</span><span id="chart-range">10 นาทีล่าสุด</span></div><svg id="chart" viewBox="0 0 360 120" role="img" aria-label="แนวโน้มค่าฝุ่น PM2.5 จำลองช่วง 10 นาที"><path id="chart-grid"/><path id="chart-area"/><path id="chart-line"/><g id="chart-labels"/></svg><p id="sensor-location" class="tiny"></p></section>
 </aside></div>
+
+<section class="network-plan" id="network-plan">
+  <div class="panelhead plan-head">
+    <div>
+      <p class="eyebrow">SENSOR NETWORK PLAN</p>
+      <h2>แผนติดตั้งเซนเซอร์ · พื้นที่ใหม่รัศมี 2 กม.</h2>
+      <span class="muted">ศูนย์กลาง 19.402722, 101.091000 · จุด hotspot กลาง 19.402710, 101.090990</span>
+    </div>
+    <div class="plan-actions">
+      <button id="plan-focus">โฟกัส 2 กม.</button>
+      <button id="plan-fit">ดูทั้งหมด</button>
+    </div>
+  </div>
+
+  <div class="plan-metrics" aria-label="สรุปเครือข่ายเซนเซอร์">
+    <div><span>Sensor เดิม</span><strong>3</strong><small>อยู่นอกวง 2 กม. ใช้เป็น regional reference</small></div>
+    <div><span>Sensor เพิ่ม</span><strong>7</strong><small>N1–N7 ภายในพื้นที่ 2 กม.</small></div>
+    <div><span>Core deployment</span><strong>3</strong><small>N1 · N2 · N3</small></div>
+    <div><span>Expansion</span><strong>4</strong><small>N4 · N5 · N6 · N7</small></div>
+  </div>
+
+  <div class="plan-layout">
+    <div class="plan-map-card">
+      <div id="network-map" role="img" aria-label="แผนที่ภูมิประเทศแสดง sensor เดิม hotspot และ sensor เสนอใหม่ N1 ถึง N7"></div>
+      <div class="plan-legend">
+        <span><i class="plan-dot existing"></i>Sensor เดิม</span>
+        <span><i class="plan-dot proposed"></i>Sensor เพิ่ม</span>
+        <span><i class="plan-dot hotspot"></i>Hotspot อ้างอิง</span>
+        <span><i class="plan-ring"></i>รัศมี 2 กม.</span>
+      </div>
+    </div>
+
+    <aside class="plan-detail" id="plan-detail">
+      <div class="section-label"><span class="status green" id="plan-phase">Core</span><span class="muted" id="plan-kind">Candidate point</span></div>
+      <h2 id="plan-title">N1 · East / ENE Ridge Watch</h2>
+      <p id="plan-role">ดักลมและควันก่อนข้ามสันเขาเข้าสู่พื้นที่หลัก</p>
+      <dl class="plan-dl">
+        <div><dt>ตำแหน่ง</dt><dd id="plan-terrain">สันเขา / upper slope ฝั่ง E/NE</dd></div>
+        <div><dt>ชุดวัด</dt><dd id="plan-package">Wind speed + Wind direction + T/RH + PM2.5/PM10</dd></div>
+        <div><dt>พิกัด candidate</dt><dd id="plan-coord">19.408233, 101.103530</dd></div>
+        <div><dt>ระยะจากศูนย์กลาง</dt><dd id="plan-distance">1.45 กม.</dd></div>
+      </dl>
+      <p class="plan-note">พิกัด N1–N7 เป็นตำแหน่งสำหรับวางแผนเบื้องต้น ต้องขยับหน้างานตาม ridge / saddle / drainage จริงประมาณ ±100–200 ม. ก่อนติดตั้ง</p>
+    </aside>
+  </div>
+
+  <div class="plan-table-wrap">
+    <table class="plan-table">
+      <thead><tr><th>จุด</th><th>Phase</th><th>Terrain role</th><th>หน้าที่</th><th>ชุด Sensor</th><th></th></tr></thead>
+      <tbody id="plan-table-body"></tbody>
+    </table>
+  </div>
+
+  <div class="plan-footnote">
+    <b>Existing sensor reference:</b>
+    จุดเดิมที่ยืนยันพิกัดแล้ว 2 จุดคือ 19.440792, 101.070164 และ 19.451642, 101.055952
+    ส่วนจุดเดิมที่ 3 แสดงเป็นตำแหน่งประมาณจากแผนที่ที่แนบมา จนกว่าจะได้รับพิกัดจริง
+  </div>
+</section>
 <section class="bottom-grid"><article class="tablepanel"><div class="panelhead"><h2>จุดที่ต้องตรวจสอบก่อน</h2><span id="table-count" class="muted">—</span></div><div class="tablewrap"><table><thead><tr><th>เซนเซอร์</th><th>สถานะ</th><th>PM2.5</th><th>CO</th><th>อัปเดต</th><th></th></tr></thead><tbody id="sensor-table"></tbody></table></div></article><article class="eventpanel"><div class="panelhead"><h2>ลำดับเหตุการณ์</h2><span class="tag">เดโม</span></div><ol id="events"></ol></article></section>
-<details class="method"><summary>ข้อมูลที่ใช้และขอบเขตของเดโม</summary><p>แผนที่ใช้ Copernicus GLO-30, ESA WorldCover 2021 และ OpenStreetMap จากงานเดิม ตำแหน่ง Weather 100 และ AQ 100 เป็นจุดเสนอสำหรับเดโม ค่าควัน สถานะการสื่อสาร และลำดับเหตุการณ์สังเคราะห์ทั้งหมด ไม่ได้เชื่อมอุปกรณ์จริง</p><p>ลม 2.18 m/s จาก 261° มาจาก ERA5 วันที่ 15 มี.ค. 2025 เวลา 14:00 น. เป็นข้อมูลระดับภูมิภาคที่นำมาใช้คงที่ในฉากนี้ ไม่ใช่ลมปัจจุบันหรือการวัดครบ 100 สถานี กติกาควันผิดปกติ: ΔPM2.5 &gt;25 µg/m³ และ ΔCO &gt;0.2 ppm เทียบฐานสมมติ 15 µg/m³ / 0.15 ppm ไม่ใช่เกณฑ์สุขภาพหรือเกณฑ์ปฏิบัติการที่สอบเทียบแล้ว</p><p>โซนสีส้มเป็นกรอบห้อมกลุ่ม AQ ที่ผิดปกติ ไม่ใช่การย้อนคำนวณจุดต้นเพลิง แนวไฟลาม 15/30/60 นาทีเป็นแบบจำลองอย่างง่ายที่ยังไม่สอบเทียบ จึงไม่แสดงเวลาปลอดภัย เส้นทางเข้าดับไฟ หรือค่าความรุนแรงของไฟ</p><p>ข้อมูลเก่าหรือขาดการติดต่อแสดงเป็นสีเทาและไม่นับเป็นหลักฐานยืนยันควัน ต้องแยก “ไม่มีสัญญาณผิดปกติ” ออกจาก “ไม่มีข้อมูล” การรับทราบอยู่เฉพาะหน้านี้และรีเซ็ตเมื่อเปลี่ยนฉาก ยังไม่มีบันทึกเหตุส่วนกลางหรือการแจ้งเตือนจริง</p><p>FIRMS snapshot เดิม 16–23 ก.ย. 2026 ไม่มีจุดในรัศมี 25 กม. จึงไม่นำมาปนกับฉากย้อนหลังนี้ แผนเชื่อมข้อมูลจริง: sensor → LoRaWAN/cellular → MQTT/API → ตรวจคุณภาพและอายุข้อมูล → dashboard ผ่าน SSE/WebSocket โดยต้องเพิ่มบริการรับข้อมูลก่อน</p><p>© OpenStreetMap contributors · © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium · Copernicus DEM · Open-Meteo / ERA5</p><a href="https://registry.opendata.aws/copernicus-dem/">Copernicus DEM</a> · <a href="https://esa-worldcover.org/en/data-access">WorldCover</a> · <a href="https://www.openstreetmap.org/copyright">OSM</a> · <a href="https://open-meteo.com/en/docs/historical-weather-api">ERA5 / Open-Meteo</a></details>
-<footer><span>FOREST WATCH · หน้าจอสาธิตสำหรับเจ้าหน้าที่</span><span id="run-status">พักการเล่น · ปรับเวลาเพื่อสำรวจเหตุการณ์</span></footer><div id="toast" role="status" aria-live="polite" hidden></div></main><script src="data.js"></script><script src="app.js"></script></body></html>
+<details class="method"><summary>ข้อมูลที่ใช้และขอบเขตของเดโม</summary><p>แผนที่ playback ด้านบนใช้ Copernicus GLO-30, ESA WorldCover 2021 และ OpenStreetMap จากงานเดิม ตำแหน่ง Weather 100 และ AQ 100 เป็นจุดเสนอสำหรับเดโม ค่าควัน สถานะการสื่อสาร และลำดับเหตุการณ์สังเคราะห์ทั้งหมด ไม่ได้เชื่อมอุปกรณ์จริง</p><p>ส่วน Sensor Network Plan ใช้ศูนย์กลางโครงการใหม่ 19.402722, 101.091000 และแสดง N1–N7 เป็น candidate สำหรับออกแบบเครือข่ายรัศมี 2 กม. จุดเหล่านี้ยังไม่ใช่พิกัดก่อสร้าง ต้องตรวจ DEM/contour หน้างาน การเปิดรับลม ถนนเข้าถึง และความปลอดภัยก่อนติดตั้งจริง</p><p>ลม 2.18 m/s จาก 261° มาจาก ERA5 วันที่ 15 มี.ค. 2025 เวลา 14:00 น. เป็นข้อมูลระดับภูมิภาคที่นำมาใช้คงที่ในฉากนี้ ไม่ใช่ลมปัจจุบันหรือการวัดครบ 100 สถานี กติกาควันผิดปกติ: ΔPM2.5 &gt;25 µg/m³ และ ΔCO &gt;0.2 ppm เทียบฐานสมมติ 15 µg/m³ / 0.15 ppm ไม่ใช่เกณฑ์สุขภาพหรือเกณฑ์ปฏิบัติการที่สอบเทียบแล้ว</p><p>โซนสีส้มเป็นกรอบห้อมกลุ่ม AQ ที่ผิดปกติ ไม่ใช่การย้อนคำนวณจุดต้นเพลิง แนวไฟลาม 15/30/60 นาทีเป็นแบบจำลองอย่างง่ายที่ยังไม่สอบเทียบ จึงไม่แสดงเวลาปลอดภัย เส้นทางเข้าดับไฟ หรือค่าความรุนแรงของไฟ</p><p>ข้อมูลเก่าหรือขาดการติดต่อแสดงเป็นสีเทาและไม่นับเป็นหลักฐานยืนยันควัน ต้องแยก “ไม่มีสัญญาณผิดปกติ” ออกจาก “ไม่มีข้อมูล” การรับทราบอยู่เฉพาะหน้านี้และรีเซ็ตเมื่อเปลี่ยนฉาก ยังไม่มีบันทึกเหตุส่วนกลางหรือการแจ้งเตือนจริง</p><p>FIRMS snapshot เดิม 16–23 ก.ย. 2026 ไม่มีจุดในรัศมี 25 กม. จึงไม่นำมาปนกับฉากย้อนหลังนี้ แผนเชื่อมข้อมูลจริง: sensor → LoRaWAN/cellular → MQTT/API → ตรวจคุณภาพและอายุข้อมูล → dashboard ผ่าน SSE/WebSocket โดยต้องเพิ่มบริการรับข้อมูลก่อน</p><p>© OpenStreetMap contributors · © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium · Copernicus DEM · Open-Meteo / ERA5</p><a href="https://registry.opendata.aws/copernicus-dem/">Copernicus DEM</a> · <a href="https://esa-worldcover.org/en/data-access">WorldCover</a> · <a href="https://www.openstreetmap.org/copyright">OSM</a> · <a href="https://open-meteo.com/en/docs/historical-weather-api">ERA5 / Open-Meteo</a></details>
+<footer><span>FOREST WATCH · หน้าจอสาธิตสำหรับเจ้าหน้าที่</span><span id="run-status">พักการเล่น · ปรับเวลาเพื่อสำรวจเหตุการณ์</span></footer><div id="toast" role="status" aria-live="polite" hidden></div></main><script src="data.js"></script><script src="app.js"></script><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script><script src="plan.js"></script></body></html>
 
