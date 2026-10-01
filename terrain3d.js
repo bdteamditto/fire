@@ -107,6 +107,18 @@
     }
     return null;
   }
+  function routeToMainRoad(graph,startKey){
+    const dist=new Map([[startKey,0]]),prev=new Map(),heap=new MinHeap();heap.push([0,startKey]);
+    while(heap.size){
+      const [d,k]=heap.pop();if(d!==dist.get(k))continue;
+      if(k!==startKey&&graph.get(k)?.major)return reconstruct(k,prev,graph);
+      for(const e of graph.get(k).edges){
+        const nd=d+e.minutes;
+        if(nd<(dist.get(e.to)??Infinity)){dist.set(e.to,nd);prev.set(e.to,{from:k,edge:e});heap.push([nd,e.to]);}
+      }
+    }
+    return null;
+  }
   function lineFC(segments){
     return {type:'FeatureCollection',features:segments.map((s,i)=>({
       type:'Feature',
@@ -257,6 +269,7 @@
         hotspots:{type:'geojson',data:hotspotFC(state.data)},
         'slope-screen':{type:'geojson',data:slopeFC(state.candidates,b)},
         route:{type:'geojson',data:emptyFC()},
+        egress:{type:'geojson',data:emptyFC()},
         offroad:{type:'geojson',data:emptyFC()},
         'route-points':{type:'geojson',data:emptyFC()}
       },
@@ -278,6 +291,8 @@
         {id:'gateways',type:'circle',source:'gateways',paint:{'circle-radius':8,'circle-color':'#5e533b','circle-stroke-width':3,'circle-stroke-color':'#f1d187'}},
         {id:'route-casing',type:'line',source:'route',paint:{'line-color':'#171d1a','line-width':7,'line-opacity':.88}},
         {id:'route',type:'line',source:'route',paint:{'line-color':'#67e39c','line-width':4.4}},
+        {id:'egress-casing',type:'line',source:'egress',paint:{'line-color':'#17202a','line-width':6,'line-opacity':.82}},
+        {id:'egress',type:'line',source:'egress',paint:{'line-color':'#64c8e8','line-width':3.2,'line-dasharray':[2,1]}},
         {id:'offroad',type:'line',source:'offroad',paint:{'line-color':'#f7ca5d','line-width':3,'line-dasharray':[2,1.5]}},
         {id:'route-points',type:'circle',source:'route-points',paint:{'circle-radius':['match',['get','kind'],'start',7,'target',9,6],'circle-color':['match',['get','kind'],'start','#55b87b','target','#df493d','#fff'],'circle-stroke-width':3,'circle-stroke-color':'#fff'}}
       ]
@@ -324,7 +339,7 @@
     const assets=document.getElementById('op-assets')?.checked!==false;
     visible('sensors',assets);visible('gateways',assets);
     const route=document.getElementById('op-route-layer')?.checked!==false;
-    visible('route-casing',route);visible('route',route);visible('offroad',route);visible('route-points',route);
+    visible('route-casing',route);visible('route',route);visible('egress-casing',route);visible('egress',route);visible('offroad',route);visible('route-points',route);
   }
 
   function popupFeature(e){
@@ -368,17 +383,19 @@
     if(!graph.size){setStatus('ไม่พบเส้นทาง OSM ที่ใช้กับ profile นี้','error');return;}
     const nearTarget=nearestNode([target.lat,target.lon],graph);
     if(!nearTarget.node){setStatus('ไม่พบ access network ใกล้เป้าหมาย','error');return;}
-    let route,startSnap,startGap=0;
+    let route,egress,startSnap,startGap=0;
     if(app.manualStart){
       const ns=nearestNode(app.manualStart,graph);startSnap=ns.node;startGap=ns.distanceKm;
       route=startSnap?routeBetween(graph,startSnap.key,nearTarget.node.key):null;
+      egress=startSnap?routeBetween(graph,nearTarget.node.key,startSnap.key):null;
     }else{
       route=routeFromMainRoad(graph,nearTarget.node.key);
+      egress=routeToMainRoad(graph,nearTarget.node.key);
       startSnap=route?.coords?.length?graph.get(key(route.coords[0])):null;
     }
     if(!route||route.coords.length<1){
       setStatus('หาเส้นทางเชื่อมต่อไม่ได้สำหรับ '+profile+' · ลอง 4x4 หรือเดินเท้า และตรวจ OSM/ภาคสนาม','error');
-      sourceSet('route',emptyFC());sourceSet('offroad',emptyFC());return;
+      sourceSet('route',emptyFC());sourceSet('egress',emptyFC());sourceSet('offroad',emptyFC());return;
     }
     const roadKm=route.edges.reduce((a,e)=>a+e.km,0),roadMin=route.edges.reduce((a,e)=>a+e.minutes,0);
     const last=route.coords[route.coords.length-1],offroadKm=distanceKm(last,[target.lat,target.lon]);
@@ -386,6 +403,7 @@
     const startCoord=route.coords[0];
     const fullCoords=[...route.coords,[target.lat,target.lon]];
     sourceSet('route',routeFC(route.coords));
+    sourceSet('egress',routeFC(egress?.coords||[]));
     sourceSet('offroad',routeFC(offroadKm>.015?[[last[0],last[1]],[target.lat,target.lon]]:[]));
     sourceSet('route-points',pointFC([
       {coord:startCoord,properties:{kind:'start'}},{coord:[target.lat,target.lon],properties:{kind:'target'}}
@@ -395,6 +413,8 @@
     const surface=Object.entries(types).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([x,d])=>x+' '+fmt(d)+' km').join(' · ');
     setText('op-route-distance',fmt(roadKm+offroadKm)+' กม.');
     setText('op-route-time',Math.round(roadMin+offroadMin)+' นาที');
+    const egressMin=(egress?.edges||[]).reduce((a,e)=>a+e.minutes,0)+offroadMin;
+    setText('op-egress-time',egress?Math.round(egressMin)+' นาที':'ไม่พบ route');
     setText('op-offroad-distance',fmt(offroadKm)+' กม.');
     setText('op-route-profile',profile==='4x4'?'4x4 / track':profile==='vehicle'?'รถทั่วไป':'เดินเท้า');
     setText('op-route-surface',surface||'—');
