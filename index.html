@@ -113,7 +113,112 @@
     Land-cover/road/radio ยังไม่ได้ใช้คำนวณ score ใน Version 4; ต้องเพิ่มก่อนออกแบบก่อสร้างจริง. Existing sensor 3 จุดคงไว้เป็น reference โดย EX-03 ยังเป็นพิกัดประมาณ.
   </div>
 </section>
+
+<section class="optimizer-panel" id="budget-optimizer" data-ready="false">
+  <div class="panelhead optimizer-head">
+    <div>
+      <p class="eyebrow">NETWORK OPTIMIZER · VERSION 5</p>
+      <h2>WorldCover + OSM Access + Gateway + Budget BOQ</h2>
+      <span class="muted">เลือกจำนวนและตำแหน่ง Super / Fusion / Weather / AQ ภายใต้งบประมาณ โดยใช้ข้อมูลภูมิประเทศและการเข้าถึงประกอบ</span>
+    </div>
+    <button id="opt-export" type="button">Export BOQ CSV</button>
+  </div>
+
+  <div class="optimizer-controls">
+    <label>งบประมาณรวม VAT 7%
+      <span class="input-money"><input id="opt-budget" type="number" min="50000" step="10000" value="500000"> บาท</span>
+    </label>
+    <label>Objective
+      <select id="opt-objective">
+        <option value="balanced">Balanced</option>
+        <option value="early">Early detection</option>
+        <option value="coverage">Coverage / wind field</option>
+        <option value="access">Field access</option>
+        <option value="cost">Cost efficiency</option>
+      </select>
+    </label>
+    <label>Radio planning range
+      <span class="input-money"><input id="opt-radio-range" type="number" min="0.5" max="10" step="0.5" value="3"> กม.</span>
+    </label>
+    <label>Gateway allowance / จุด
+      <span class="input-money"><input id="opt-gateway-cost" type="number" min="0" step="1000" value="0"> บาท</span>
+      <small>ยังไม่มีราคาใน quotation</small>
+    </label>
+    <label>Install / solar / enclosure allowance / sensor site
+      <span class="input-money"><input id="opt-install-cost" type="number" min="0" step="1000" value="0"> บาท</span>
+      <small>ยังไม่มีราคาใน quotation</small>
+    </label>
+    <button id="opt-run" class="primary" type="button">คำนวณใหม่</button>
+  </div>
+
+  <div class="optimizer-data-status">
+    <article><span>ESA WorldCover 2021</span><b id="opt-worldcover-status" data-state="loading">กำลังโหลด…</b><small>วิเคราะห์ land-cover class จาก COG 10 m; WMS ใช้แค่แสดงผล</small></article>
+    <article><span>OpenStreetMap / Overpass</span><b id="opt-osm-status" data-state="loading">กำลังโหลด…</b><small>ระยะถึงถนน/track/path และ mast/tower ที่มี tag</small></article>
+    <article><span>Radio / Gateway</span><b id="opt-radio-status" data-state="loading">รอข้อมูล…</b><small>planning proxy จาก elevation + access + coverage; ไม่ใช่ RF/LOS survey</small></article>
+  </div>
+
+  <div class="optimizer-metrics">
+    <div><span>Selected sensor sites</span><strong id="opt-node-count">—</strong><small id="opt-counts">—</small></div>
+    <div><span>Gateway sites</span><strong id="opt-gateway-count">—</strong><small>ตาม planning range ที่กำหนด</small></div>
+    <div><span>BOQ total incl. VAT</span><strong id="opt-total-cost">—</strong><small id="opt-budget-use">—</small></div>
+    <div><span>Data status</span><strong class="optimizer-data-summary" id="opt-data-summary">กำลังประมวลผล</strong><small>fallback จะระบุชัดเมื่อ source โหลดไม่ได้</small></div>
+  </div>
+
+  <div class="optimizer-layout">
+    <div class="optimizer-map-card">
+      <div id="optimizer-map" role="img" aria-label="แผนที่ผลการเลือก sensor และ gateway จาก budget optimizer"></div>
+      <div class="optimizer-map-note">วงเส้นประรอบ Gateway = planning range ที่ผู้ใช้กำหนด ไม่ใช่การรับรอง LoRa/cellular coverage หรือ line-of-sight</div>
+    </div>
+    <aside class="optimizer-method">
+      <p class="eyebrow">OPTIMIZER LOGIC</p>
+      <h3>ข้อมูลใดมีผลต่อคะแนน</h3>
+      <div class="optimizer-score-list">
+        <span><b>DEM</b> elevation / slope / ridge–valley context</span>
+        <span><b>WorldCover</b> fuel context + siting suitability</span>
+        <span><b>OSM</b> ระยะถึง road / track / path</span>
+        <span><b>Historical</b> hotspot + smoke observability</span>
+        <span><b>Network</b> coverage gain / spacing</span>
+        <span><b>Gateway</b> elevation + access + node coverage</span>
+      </div>
+      <p class="optimizer-warning">Road access มาจาก OSM tagging จึงอาจไม่ครบทุกเส้นทาง และ “ใกล้ถนน” ไม่ได้แปลว่าเข้าถึงได้จริงในฤดูไฟป่า ต้องสำรวจภาคสนามก่อนก่อสร้าง</p>
+      <p class="optimizer-warning">WorldCover เป็นข้อมูลปี 2021; ใช้เป็น baseline land-cover context ไม่ใช่ข้อมูลเชื้อเพลิงปัจจุบัน</p>
+    </aside>
+  </div>
+
+  <div class="optimizer-subhead">
+    <div><p class="eyebrow">BILL OF QUANTITIES</p><h3>BOQ จากผล optimizer</h3></div>
+    <span>ราคา sensor อ้างอิง QT2609099 · Gateway / installation เป็นช่องให้กรอกเอง</span>
+  </div>
+  <div class="plan-table-wrap">
+    <table class="plan-table optimizer-boq">
+      <thead><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย (บาท)</th><th>รวม (บาท)</th><th>ที่มาราคา</th></tr></thead>
+      <tbody id="boq-body"></tbody>
+      <tfoot>
+        <tr><th colspan="3">Subtotal ก่อน VAT</th><th id="boq-ex">—</th><th></th></tr>
+        <tr><th colspan="3">VAT 7%</th><th id="boq-vat">—</th><th></th></tr>
+        <tr><th colspan="3">รวม VAT</th><th id="boq-total">—</th><th></th></tr>
+        <tr><th colspan="3">งบประมาณคงเหลือ</th><th id="boq-budget-left">—</th><th></th></tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="optimizer-subhead">
+    <div><p class="eyebrow">SELECTED SITES</p><h3>ตำแหน่งที่ optimizer เลือก</h3></div>
+    <span>พิกัดเป็น planning candidate ไม่ใช่ construction coordinate</span>
+  </div>
+  <div class="plan-table-wrap">
+    <table class="plan-table optimizer-sites">
+      <thead><tr><th>Site</th><th>Role</th><th>พิกัด</th><th>Utility</th><th>WorldCover</th><th>ระยะ access</th><th>Gateway</th></tr></thead>
+      <tbody id="opt-sites-body"></tbody>
+    </table>
+  </div>
+
+  <div class="plan-footnote">
+    <b>Cost scope:</b> BOQ นี้คำนวณเฉพาะ sensor ที่มีราคาจาก quotation QT2609099 และ allowance ที่ผู้ใช้กรอกเอง.
+    RK300-08 multi-gas, gateway จริง, pole, solar/battery, enclosure, cabling, civil work, SIM/data plan, installation, calibration และ maintenance ยังไม่มีราคาต้นทางในเอกสารที่แนบ จึงไม่ถูกเดาเป็นราคาอัตโนมัติ.
+  </div>
+</section>
 <section class="bottom-grid"><article class="tablepanel"><div class="panelhead"><h2>จุดที่ต้องตรวจสอบก่อน</h2><span id="table-count" class="muted">—</span></div><div class="tablewrap"><table><thead><tr><th>เซนเซอร์</th><th>สถานะ</th><th>PM2.5</th><th>CO</th><th>อัปเดต</th><th></th></tr></thead><tbody id="sensor-table"></tbody></table></div></article><article class="eventpanel"><div class="panelhead"><h2>ลำดับเหตุการณ์</h2><span class="tag">เดโม</span></div><ol id="events"></ol></article></section>
 <details class="method"><summary>ข้อมูลที่ใช้และขอบเขตของเดโม</summary><p>แผนที่ playback ด้านบนใช้ Copernicus GLO-30, ESA WorldCover 2021 และ OpenStreetMap จากงานเดิม ตำแหน่ง Weather 100 และ AQ 100 เป็นจุดเสนอสำหรับเดโม ค่าควัน สถานะการสื่อสาร และลำดับเหตุการณ์สังเคราะห์ทั้งหมด ไม่ได้เชื่อมอุปกรณ์จริง</p><p>Sensor Network Plan Version 4 เลิกวาง N8–N21 แบบ bearing/radius รอบ hotspot และใช้ candidate grid ที่ประเมินด้วย Copernicus DEM GLO-90, slope/aspect proxy, historical hotspot proximity, wind-based smoke interception และ network geometry แทน Hotspot H-01–H-03 ถูกใช้เป็น historical replay/validation events ไม่ใช่ศูนย์กลาง network. คะแนนยังไม่รวม road/access และ radio survey จึงยังไม่ใช่พิกัดก่อสร้าง</p><p>ลม 2.18 m/s จาก 261° มาจาก ERA5 วันที่ 15 มี.ค. 2025 เวลา 14:00 น. เป็นข้อมูลระดับภูมิภาคที่นำมาใช้คงที่ในฉากนี้ ไม่ใช่ลมปัจจุบันหรือการวัดครบ 100 สถานี กติกาควันผิดปกติ: ΔPM2.5 &gt;25 µg/m³ และ ΔCO &gt;0.2 ppm เทียบฐานสมมติ 15 µg/m³ / 0.15 ppm ไม่ใช่เกณฑ์สุขภาพหรือเกณฑ์ปฏิบัติการที่สอบเทียบแล้ว</p><p>โซนสีส้มเป็นกรอบห้อมกลุ่ม AQ ที่ผิดปกติ ไม่ใช่การย้อนคำนวณจุดต้นเพลิง แนวไฟลาม 15/30/60 นาทีเป็นแบบจำลองอย่างง่ายที่ยังไม่สอบเทียบ จึงไม่แสดงเวลาปลอดภัย เส้นทางเข้าดับไฟ หรือค่าความรุนแรงของไฟ</p><p>ข้อมูลเก่าหรือขาดการติดต่อแสดงเป็นสีเทาและไม่นับเป็นหลักฐานยืนยันควัน ต้องแยก “ไม่มีสัญญาณผิดปกติ” ออกจาก “ไม่มีข้อมูล” การรับทราบอยู่เฉพาะหน้านี้และรีเซ็ตเมื่อเปลี่ยนฉาก ยังไม่มีบันทึกเหตุส่วนกลางหรือการแจ้งเตือนจริง</p><p>FIRMS snapshot เดิม 16–23 ก.ย. 2026 ไม่มีจุดในรัศมี 25 กม. จึงไม่นำมาปนกับฉากย้อนหลังนี้ แผนเชื่อมข้อมูลจริง: sensor → LoRaWAN/cellular → MQTT/API → ตรวจคุณภาพและอายุข้อมูล → dashboard ผ่าน SSE/WebSocket โดยต้องเพิ่มบริการรับข้อมูลก่อน</p><p>© OpenStreetMap contributors · © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium · Copernicus DEM · Open-Meteo / ERA5</p><a href="https://registry.opendata.aws/copernicus-dem/">Copernicus DEM</a> · <a href="https://esa-worldcover.org/en/data-access">WorldCover</a> · <a href="https://www.openstreetmap.org/copyright">OSM</a> · <a href="https://open-meteo.com/en/docs/historical-weather-api">ERA5 / Open-Meteo</a></details>
-<footer><span>FOREST WATCH · หน้าจอสาธิตสำหรับเจ้าหน้าที่</span><span id="run-status">พักการเล่น · ปรับเวลาเพื่อสำรวจเหตุการณ์</span></footer><div id="toast" role="status" aria-live="polite" hidden></div></main><script src="data.js"></script><script src="app.js"></script><script src="vendor/leaflet/leaflet.js" crossorigin=""></script><script src="plan.js?v=dem-network-v4"></script></body></html>
+<footer><span>FOREST WATCH · หน้าจอสาธิตสำหรับเจ้าหน้าที่</span><span id="run-status">พักการเล่น · ปรับเวลาเพื่อสำรวจเหตุการณ์</span></footer><div id="toast" role="status" aria-live="polite" hidden></div></main><script src="data.js"></script><script src="app.js"></script><script src="vendor/leaflet/leaflet.js" crossorigin=""></script><script src="plan.js?v=dem-network-v5-base"></script><script src="https://cdn.jsdelivr.net/npm/geotiff@3.0.5/dist-browser/geotiff.min.js"></script><script src="optimizer.js?v=budget-v5"></script></body></html>
 
