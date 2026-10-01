@@ -168,7 +168,8 @@
     })};
   }
   function emptyFC(){return {type:'FeatureCollection',features:[]};}
-  function routeFC(coords){return {type:'FeatureCollection',features:coords?.length?[{type:'Feature',properties:{},geometry:{type:'LineString',coordinates:coords.map(p=>[p[1],p[0]])}}]:[]};}
+  function routeFC(coords){return {type:'FeatureCollection',features:coords?.length>=2?[{type:'Feature',properties:{},geometry:{type:'LineString',coordinates:coords.map(p=>[p[1],p[0]])}}]:[]};}
+  function connectorFC(parts){return {type:'FeatureCollection',features:parts.flatMap(coords=>routeFC(coords).features)};}
   function pointFC(points){return {type:'FeatureCollection',features:points.map(p=>({type:'Feature',properties:p.properties||{},geometry:{type:'Point',coordinates:[p.coord[1],p.coord[0]]}}))};}
   async function fetchElevations(coords){
     if(!coords.length)return [];
@@ -180,8 +181,13 @@
     for(let i=0;i<sampled.length;i+=100){
       const p=sampled.slice(i,i+100);
       const url='https://api.open-meteo.com/v1/elevation?latitude='+encodeURIComponent(p.map(x=>x[0].toFixed(6)).join(','))+'&longitude='+encodeURIComponent(p.map(x=>x[1].toFixed(6)).join(','));
-      const r=await fetch(url,{cache:'force-cache'});if(!r.ok)throw new Error('elevation '+r.status);
-      const j=await r.json();out.push(...(j.elevation||[]));
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+      try{
+        const r=await fetch(url,{cache:'force-cache',signal:controller.signal});if(!r.ok)throw new Error('elevation '+r.status);
+        const j=await r.json();
+        if(!Array.isArray(j.elevation)||j.elevation.length!==p.length||!j.elevation.every(v=>typeof v==='number'&&Number.isFinite(v)))throw new Error('elevation data unavailable');
+        out.push(...j.elevation);
+      }finally{clearTimeout(timer);}
     }
     return {coords:sampled,elevation:out};
   }
@@ -196,33 +202,58 @@
     return {gain,loss,maxGrade};
   }
 
-  const app={map:null,state:null,graph:null,profile:'4x4',manualStart:null,customTarget:null,pickMode:null,currentRoute:null,demSource:null,routeRevision:0};
+  const app={map:null,state:null,graph:null,profile:'4x4',targetId:'H-01',manualStart:null,customTarget:null,pickMode:null,pickMap:null,currentRoute:null,demSource:null,routeRevision:0,initialized:false,existingMarkers:[]};
+
+  const planner2d=document.getElementById('op2d-planner');
+  if(planner2d){
+    const clone=document.querySelector('.op-command').cloneNode(true);
+    clone.querySelectorAll('*').forEach(el=>{
+      ['id','for','aria-describedby'].forEach(attr=>{
+        if(el.hasAttribute(attr))el.setAttribute(attr,el.getAttribute(attr).replace(/\bop-/g,'op2d-'));
+      });
+    });
+    clone.querySelector('.eyebrow').textContent='2D ACCESS PLANNER';
+    clone.querySelector('h3').textContent='กำหนดจุดไฟและเส้นทางบนแผนที่ 2D';
+    planner2d.replaceChildren(clone);
+  }
+  function pairedElements(id){return [document.getElementById(id),document.getElementById(id.replace(/^op-/,'op2d-'))].filter(Boolean);}
+  function setValue(id,value){pairedElements(id).forEach(el=>el.value=value);}
+  function setPickMode(kind,view){
+    app.pickMode=kind;app.pickMap=kind?view:null;
+    window.dispatchEvent(new CustomEvent('forestwatch:2d-pick-mode',{detail:{active:!!kind&&view==='2d'}}));
+    if(app.map)app.map.getCanvas().style.cursor=kind&&view==='3d'?'crosshair':'';
+  }
 
   function setStatus(text,state='ready'){
-    const el=document.getElementById('op-status');if(!el)return;el.textContent=text;el.dataset.state=state;
+    pairedElements('op-status').forEach(el=>{el.textContent=text;el.dataset.state=state;});
   }
-  function setText(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
-  function sourceSet(id,data){const s=app.map?.getSource(id);if(s)s.setData(data);}
+  function setMapStatus(text,state='ready'){
+    const el=document.getElementById('op-status');if(el){el.textContent=text;el.dataset.state=state;}
+  }
+  function setText(id,v){pairedElements(id).forEach(e=>e.textContent=v);}
+  function sourceSet(id,data){
+    const s=app.map?.getSource(id);if(s)s.setData(data);
+    document.getElementById('operational-3d-map')?.setAttribute('data-'+id+'-feature-count',String(data.features?.length||0));
+    window.ForestWatchOperational2D?.setOverlay(id,data);
+  }
   function visible(id,on){if(app.map?.getLayer(id))app.map.setLayoutProperty(id,'visibility',on?'visible':'none');}
   function clearCoordinateError(kind){
-    const error=document.getElementById('op-'+kind+'-coordinate-error');
-    if(error){error.textContent='';error.hidden=true;}
-    ['lat','lon'].forEach(axis=>document.getElementById('op-'+kind+'-'+axis)?.removeAttribute('aria-invalid'));
+    pairedElements('op-'+kind+'-coordinate-error').forEach(error=>{error.textContent='';error.hidden=true;});
+    ['lat','lon'].forEach(axis=>pairedElements('op-'+kind+'-'+axis).forEach(e=>e.removeAttribute('aria-invalid')));
   }
   function writeCoordinates(kind,coord){
     ['lat','lon'].forEach((axis,i)=>{
-      const field=document.getElementById('op-'+kind+'-'+axis);
-      if(field)field.value=coord?String(Number(coord[i].toFixed(6))):'';
+      setValue('op-'+kind+'-'+axis,coord?String(Number(coord[i].toFixed(6))):'');
     });
     clearCoordinateError(kind);
   }
-  function readCoordinates(kind){
-    const fields=['lat','lon'].map(axis=>document.getElementById('op-'+kind+'-'+axis));
+  function readCoordinates(kind,prefix='op-'){
+    const fields=['lat','lon'].map(axis=>document.getElementById(prefix+kind+'-'+axis));
     const values=fields.map(f=>f.value.trim()===''?NaN:Number(f.value));
     const invalid=values.map((v,i)=>!Number.isFinite(v)||Math.abs(v)>(i===0?90:180));
     clearCoordinateError(kind);
     if(invalid.some(Boolean)){
-      const error=document.getElementById('op-'+kind+'-coordinate-error');
+      const error=document.getElementById(prefix+kind+'-coordinate-error');
       error.textContent='กรอกพิกัดให้ครบ: Latitude −90 ถึง 90 และ Longitude −180 ถึง 180 เป็นองศาทศนิยม';error.hidden=false;
       fields.forEach((f,i)=>{if(invalid[i])f.setAttribute('aria-invalid','true');});
       fields[invalid.indexOf(true)].focus();return null;
@@ -241,21 +272,25 @@
     sourceSet('route-points',pointFC(points));
   }
   function setCoordinatePoint(kind,coord){
-    app.pickMode=null;clearRoute();writeCoordinates(kind,coord);
+    setPickMode(null,null);clearRoute();writeCoordinates(kind,coord);
     if(kind==='start'){
       app.manualStart=coord;
       setText('op-start-mode','Manual start · '+coord[0].toFixed(6)+', '+coord[1].toFixed(6));
     }else{
-      app.customTarget=coord;document.getElementById('op-target').value='CUSTOM';
+      app.customTarget=coord;app.targetId='CUSTOM';setValue('op-target','CUSTOM');
     }
     showChosenPoints();
     setStatus(kind==='start'?'กำหนดพิกัดจุดเริ่มแล้ว · กดคำนวณเส้นทาง':'กำหนดพิกัดจุดไฟแล้ว · กดคำนวณเส้นทาง','ready');
   }
   function currentTarget(){
-    const sel=document.getElementById('op-target')?.value||'H-01';
+    const sel=app.targetId;
     if(sel==='CUSTOM')return app.customTarget?{id:'Custom fire point',lat:app.customTarget[0],lon:app.customTarget[1],type:'fire'}:null;
+    if(!app.state)return null;
     if(sel.startsWith('H-')){
       const h=app.state.data.historicalHotspots.find(x=>x.id===sel);return h?{id:h.id,lat:h.lat,lon:h.lon,type:'fire'}:null;
+    }
+    if(sel.startsWith('EX-')){
+      const sensor=(app.state.data.existing||[]).find(x=>x.id===sel);return sensor?{...sensor,type:'existing'}:null;
     }
     if(sel.startsWith('S')){
       const idx=Number(sel.slice(1))-1,n=app.state.result.nodes[idx];return n?{id:sel,lat:n.p.lat,lon:n.p.lon,type:'sensor'}:null;
@@ -264,17 +299,25 @@
   }
   function populateTargets(){
     const sel=document.getElementById('op-target');if(!sel)return;
-    const old=sel.value;
+    const old=app.targetId;
     sel.innerHTML='';
     for(const h of app.state.data.historicalHotspots||[]){
       const o=document.createElement('option');o.value=h.id;o.textContent=h.id+' · Historical fire / hotspot';sel.appendChild(o);
+    }
+    for(const sensor of app.state.data.existing||[]){
+      const o=document.createElement('option');o.value=sensor.id;o.textContent=sensor.id+' · เซ็นเซอร์เดิม'+(sensor.id==='EX-03'?' (พิกัดประมาณ)':'');sel.appendChild(o);
     }
     (app.state.result.nodes||[]).forEach((n,i)=>{
       const o=document.createElement('option');o.value='S'+String(i+1).padStart(2,'0');o.textContent=o.value+' · '+n.role+' site';sel.appendChild(o);
     });
     const custom=document.createElement('option');custom.value='CUSTOM';custom.textContent='Custom fire point · กรอกพิกัดหรือคลิกบนแผนที่';sel.appendChild(custom);
     if([...sel.options].some(o=>o.value===old))sel.value=old;
-    if(sel.value!==old){const target=currentTarget();writeCoordinates('target',target?[target.lat,target.lon]:null);}
+    app.targetId=sel.value;
+    const sel2=document.getElementById('op2d-target');
+    if(sel2){sel2.replaceChildren(...[...sel.options].map(o=>o.cloneNode(true)));sel2.value=sel.value;}
+    if(sel.value!==old || (!document.getElementById('op-target-lat').value&&!document.getElementById('op-target-lon').value)){
+      const target=currentTarget();writeCoordinates('target',target?[target.lat,target.lon]:null);
+    }
   }
   function updateOperationalData(state){
     const previousTarget=app.state?currentTarget():null;
@@ -283,7 +326,6 @@
     if(previousTarget?.lat!==target?.lat || previousTarget?.lon!==target?.lon){
       clearRoute();writeCoordinates('target',target?[target.lat,target.lon]:null);showChosenPoints();
     }
-    if(!app.map)return;
     sourceSet('roads',lineFC(state.osm.segments||[]));
     sourceSet('support',supportFC(state.osm.support||[]));
     sourceSet('barriers',barrierFC(state.osm.barriers||[]));
@@ -291,14 +333,44 @@
     sourceSet('gateways',gatewayFC(state.result));
     sourceSet('hotspots',hotspotFC(state.data));
     sourceSet('slope-screen',slopeFC(state.candidates,state.data.bounds));
+    updateExistingMarkers(state.data.existing||[]);
     setText('op-road-count',(state.osm.segments||[]).length.toLocaleString('th-TH'));
     setText('op-support-count',(state.osm.support||[]).length.toLocaleString('th-TH'));
     setText('op-barrier-count',(state.osm.barriers||[]).length.toLocaleString('th-TH'));
-    setText('op-route-data',state.osmOK?'OSM routing graph ready':'OSM fallback · route unavailable');
+    const cached=state.osm.source==='cache';
+    const cacheDate=cached&&state.osm.fetchedAt?new Date(state.osm.fetchedAt).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',hour12:false}):'';
+    setText('op-route-data',state.osmOK?(cached?'OSM cache · '+cacheDate:'OSM routing graph ready'):'OSM fallback · route unavailable');
+    if(!app.currentRoute&&!app.pickMode){
+      const status=document.getElementById('op2d-status');
+      if(status){
+        const finished=!!state.prices;
+        status.textContent=state.osmOK?'แผนที่ 2D พร้อม · เซ็นเซอร์เดิม 3 จุด + ถนน + เส้นทางเข้า–ออก'+(cached?' · ใช้ OSM ที่บันทึกไว้ '+cacheDate:''):finished?'แผนที่ 2D แสดงเซ็นเซอร์เดิมแล้ว · OSM โหลดไม่ได้ จึงคำนวณเส้นทางไม่ได้':'แผนที่ 2D แสดงเซ็นเซอร์เดิมแล้ว · รอข้อมูล OSM สำหรับเส้นทาง';
+        status.dataset.state=state.osmOK?'ready':finished?'error':'loading';
+      }
+    }
+  }
+
+  function updateExistingMarkers(sensors){
+    if(!app.map)return;
+    app.existingMarkers.forEach(marker=>marker.remove());app.existingMarkers=[];
+    sensors.forEach(sensor=>{
+      const el=document.createElement('button');el.type='button';el.className='op-existing-marker'+(sensor.id==='EX-03'?' approximate':'');el.textContent=sensor.id;
+      el.setAttribute('aria-label',sensor.id+' · เซ็นเซอร์เดิม'+(sensor.id==='EX-03'?' · พิกัดประมาณ':''));
+      el.title=sensor.id+' · '+sensor.note;
+      el.addEventListener('click',e=>{
+        e.stopPropagation();
+        if(app.pickMode&&app.pickMap==='3d'){setCoordinatePoint(app.pickMode,[sensor.lat,sensor.lon]);return;}
+        const box=document.createElement('div');box.textContent=sensor.id+' · เซ็นเซอร์เดิม · '+sensor.note+' · '+sensor.lat.toFixed(6)+', '+sensor.lon.toFixed(6);
+        new maplibregl.Popup({maxWidth:'300px'}).setLngLat([sensor.lon,sensor.lat]).setDOMContent(box).addTo(app.map);
+      });
+      app.existingMarkers.push(new maplibregl.Marker({element:el}).setLngLat([sensor.lon,sensor.lat]).addTo(app.map));
+    });
+    document.getElementById('operational-3d-map').dataset.existingCount=String(sensors.length);
+    app.existingMarkers.forEach(marker=>marker.getElement().style.display=document.getElementById('op-assets')?.checked===false?'none':'');
   }
 
   function createMap(state){
-    if(!window.maplibregl){setStatus('โหลด MapLibre ไม่สำเร็จ · กรุณารีเฟรชหรือเช็กการบล็อก CDN','error');return;}
+    if(!window.maplibregl){setMapStatus('โหลด MapLibre ไม่สำเร็จ · แผนที่ 2D ยังใช้งานได้','error');return;}
     const el=document.getElementById('operational-3d-map');if(!el)return;
     const demUrl='https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png';
     let contourReady=!!window.mlcontour;
@@ -362,12 +434,12 @@
     map.addControl(new maplibregl.ScaleControl({maxWidth:120,unit:'metric'}),'bottom-right');
     map.on('load',()=>{
       map.setTerrain({source:'terrain-dem',exaggeration:1.5});
-      setStatus(contourReady?'3D terrain พร้อม · Satellite + hillshade + contour + OSM access network':'3D terrain พร้อม · contour engine ไม่พร้อม จึงแสดง terrain + hillshade + access network แทน','ready');
+      setMapStatus(contourReady?'3D terrain พร้อม · Satellite + hillshade + contour + OSM access network':'3D terrain พร้อม · contour engine ไม่พร้อม จึงแสดง terrain + hillshade + access network แทน','ready');
       updateOperationalData(app.state);
       bindMapInteractions();
       applyMode('terrain');
     });
-    map.on('error',e=>{if(e?.error?.message)setStatus('บางชั้นข้อมูลโหลดไม่ครบ: '+e.error.message,'error');});
+    map.on('error',e=>{if(e?.error?.message)setMapStatus('บางชั้นข้อมูลโหลดไม่ครบ: '+e.error.message,'error');});
     if(window.ResizeObserver){const ro=new ResizeObserver(()=>map.resize());ro.observe(el);}
   }
 
@@ -378,9 +450,9 @@
   function applyMode(mode){
     document.querySelectorAll('[data-op-mode]').forEach(b=>b.classList.toggle('active',b.dataset.opMode===mode));
     const c=document.getElementById('op-contours'),h=document.getElementById('op-hillshade'),sl=document.getElementById('op-slope'),r=document.getElementById('op-roads'),t=document.getElementById('op-tracks'),sup=document.getElementById('op-support');
-    if(mode==='terrain'){if(c)c.checked=true;if(h)h.checked=true;if(sl)sl.checked=false;if(r)r.checked=true;if(t)t.checked=true;if(sup)sup.checked=false;app.map.easeTo({pitch:65,bearing:-28,duration:650});}
-    if(mode==='access'){if(c)c.checked=true;if(h)h.checked=true;if(sl)sl.checked=false;if(r)r.checked=true;if(t)t.checked=true;if(sup)sup.checked=true;app.map.easeTo({pitch:48,bearing:0,duration:650});}
-    if(mode==='suppression'){if(c)c.checked=true;if(h)h.checked=true;if(sl)sl.checked=true;if(r)r.checked=true;if(t)t.checked=true;if(sup)sup.checked=true;app.map.easeTo({pitch:57,bearing:-18,duration:650});}
+    if(mode==='terrain'){if(c)c.checked=true;if(h)h.checked=true;if(sl)sl.checked=false;if(r)r.checked=true;if(t)t.checked=true;if(sup)sup.checked=false;app.map?.easeTo({pitch:65,bearing:-28,duration:650});}
+    if(mode==='access'){if(c)c.checked=true;if(h)h.checked=true;if(sl)sl.checked=false;if(r)r.checked=true;if(t)t.checked=true;if(sup)sup.checked=true;app.map?.easeTo({pitch:48,bearing:0,duration:650});}
+    if(mode==='suppression'){if(c)c.checked=true;if(h)h.checked=true;if(sl)sl.checked=true;if(r)r.checked=true;if(t)t.checked=true;if(sup)sup.checked=true;app.map?.easeTo({pitch:57,bearing:-18,duration:650});}
     syncLayerToggles();
   }
   function syncLayerToggles(){
@@ -395,6 +467,7 @@
     visible('support',sup);visible('barriers',sup);
     const assets=document.getElementById('op-assets')?.checked!==false;
     visible('sensors',assets);visible('gateways',assets);
+    app.existingMarkers.forEach(marker=>marker.getElement().style.display=assets?'':'none');
     const route=document.getElementById('op-route-layer')?.checked!==false;
     visible('route-casing',route);visible('route',route);visible('egress-casing',route);visible('egress',route);visible('offroad',route);visible('route-points',route);
   }
@@ -419,10 +492,10 @@
   }
   function bindMapInteractions(){
     app.map.on('click',e=>{
-      if(app.pickMode==='start'){
+      if(app.pickMode==='start'&&app.pickMap==='3d'){
         setCoordinatePoint('start',[e.lngLat.lat,((e.lngLat.lng+180)%360+360)%360-180]);return;
       }
-      if(app.pickMode==='target'){
+      if(app.pickMode==='target'&&app.pickMap==='3d'){
         setCoordinatePoint('target',[e.lngLat.lat,((e.lngLat.lng+180)%360+360)%360-180]);return;
       }
       popupFeature(e);
@@ -431,7 +504,8 @@
     app.map.on('mouseleave','roads',()=>app.map.getCanvas().style.cursor='');
   }
 
-  async function calculateRoute(){
+  async function calculateRoute(view='3d'){
+    setPickMode(null,null);
     clearRoute();const revision=app.routeRevision;
     if(!app.state?.osmOK){setStatus('ไม่มี OSM routing graph จึงยังคำนวณ access route ไม่ได้','error');return;}
     const target=currentTarget();if(!target){setStatus('กรุณาเลือกหรือกำหนดจุดเป้าหมาย','error');return;}
@@ -456,17 +530,22 @@
       return;
     }
     const roadKm=route.edges.reduce((a,e)=>a+e.km,0),roadMin=route.edges.reduce((a,e)=>a+e.minutes,0);
-    const last=route.coords[route.coords.length-1],offroadKm=distanceKm(last,[target.lat,target.lon]);
+    const last=route.coords[route.coords.length-1],targetGap=distanceKm(last,[target.lat,target.lon]),offroadKm=targetGap+startGap;
     const offroadMin=offroadKm/(profile==='foot'?3.0:2.8)*60;
-    const startCoord=route.coords[0];
-    const fullCoords=[...route.coords,[target.lat,target.lon]];
+    const startCoord=app.manualStart||route.coords[0];
+    const fullCoords=[...(app.manualStart?[app.manualStart]:[]),...route.coords,[target.lat,target.lon]];
+    const viewCoords=[...fullCoords,...(egress?.coords||[])];
     sourceSet('route',routeFC(route.coords));
     sourceSet('egress',routeFC(egress?.coords||[]));
-    sourceSet('offroad',routeFC(offroadKm>.015?[[last[0],last[1]],[target.lat,target.lon]]:[]));
+    sourceSet('offroad',connectorFC([
+      ...(targetGap>.015?[[last,[target.lat,target.lon]]]:[]),
+      ...(app.manualStart&&startGap>.015?[[app.manualStart,route.coords[0]]]:[])
+    ]));
     sourceSet('route-points',pointFC([
       {coord:startCoord,properties:{kind:'start'}},{coord:[target.lat,target.lon],properties:{kind:'target'}}
     ]));
-    app.map.fitBounds([[Math.min(...fullCoords.map(p=>p[1])),Math.min(...fullCoords.map(p=>p[0]))],[Math.max(...fullCoords.map(p=>p[1])),Math.max(...fullCoords.map(p=>p[0]))]],{padding:70,pitch:54,bearing:-16,duration:700});
+    if(view==='2d')window.ForestWatchOperational2D?.fitRoute(viewCoords);
+    else app.map?.fitBounds([[Math.min(...viewCoords.map(p=>p[1])),Math.min(...viewCoords.map(p=>p[0]))],[Math.max(...viewCoords.map(p=>p[1])),Math.max(...viewCoords.map(p=>p[0]))]],{padding:70,pitch:54,bearing:-16,duration:700});
     const types={};route.edges.forEach(e=>{types[e.seg.hw]=(types[e.seg.hw]||0)+e.km;});
     const surface=Object.entries(types).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([x,d])=>x+' '+fmt(d)+' km').join(' · ');
     setText('op-route-distance',fmt(roadKm+offroadKm)+' กม.');
@@ -476,15 +555,18 @@
     setText('op-offroad-distance',fmt(offroadKm)+' กม.');
     setText('op-route-profile',profile==='4x4'?'4x4 / track':profile==='vehicle'?'รถทั่วไป':'เดินเท้า');
     setText('op-route-surface',surface||'—');
-    setText('op-start-mode',app.manualStart?'Manual start · snap '+Math.round(startGap*1000)+' m':'Auto staging · nearest connected major road');
+    setText('op-start-mode',app.manualStart?'Manual start · '+startCoord[0].toFixed(6)+', '+startCoord[1].toFixed(6)+' · ช่วงเชื่อมถนน '+Math.round(startGap*1000)+' m':'Auto staging · nearest connected major road');
+    app.currentRoute={target,profile,route,roadKm,offroadKm};
+    setStatus('เส้นทางพร้อม · กำลังอ่านความสูงเพิ่มเติม…','ready');
+    let elevationOK=false;
     try{
       const elev=await fetchElevations(fullCoords),stats=profileStats(elev);
       if(revision!==app.routeRevision)return;
       setText('op-elevation-gain',stats.gain==null?'—':Math.round(stats.gain)+' m');
       setText('op-max-grade',stats.maxGrade==null?'—':fmt(stats.maxGrade)+'%');
+      elevationOK=stats.gain!=null;
     }catch(err){if(revision!==app.routeRevision)return;setText('op-elevation-gain','—');setText('op-max-grade','—');}
-    app.currentRoute={target,profile,route,roadKm,offroadKm};
-    setStatus('เส้นทางพร้อม · เป็น planning route จาก OSM ไม่ใช่คำสั่งเข้าดับไฟหรือการรับรองสภาพถนนจริง','ready');
+    setStatus('เส้นทางพร้อม'+(elevationOK?'':' · ข้อมูลความสูงไม่พร้อม')+' · เป็น planning route จาก OSM ไม่ใช่คำสั่งเข้าดับไฟหรือการรับรองสภาพถนนจริง','ready');
   }
 
   function bindControls(){
@@ -494,37 +576,58 @@
     document.getElementById('op-exaggeration')?.addEventListener('input',e=>{
       const x=Number(e.target.value);setText('op-exag-value',x.toFixed(1)+'×');if(app.map?.getSource('terrain-dem'))app.map.setTerrain({source:'terrain-dem',exaggeration:x});
     });
-    document.getElementById('op-route')?.addEventListener('click',calculateRoute);
-    ['start','target'].forEach(kind=>{
-      document.getElementById('op-'+kind+'-coordinates')?.addEventListener('submit',e=>{
-        e.preventDefault();const coord=readCoordinates(kind);if(coord)setCoordinatePoint(kind,coord);
+    ['op-','op2d-'].forEach(prefix=>{
+      const view=prefix==='op2d-'?'2d':'3d';
+      document.getElementById(prefix+'fit-existing')?.addEventListener('click',()=>{
+        const coords=(app.state?.data.existing||[]).map(sensor=>[sensor.lat,sensor.lon]);
+        if(!coords.length){setStatus('กำลังโหลดพิกัดเซ็นเซอร์เดิม','loading');return;}
+        if(view==='2d')window.ForestWatchOperational2D?.fitRoute(coords);
+        else app.map?.fitBounds([[Math.min(...coords.map(p=>p[1])),Math.min(...coords.map(p=>p[0]))],[Math.max(...coords.map(p=>p[1])),Math.max(...coords.map(p=>p[0]))]],{padding:65,pitch:35,bearing:0,duration:500,maxZoom:14});
+        document.getElementById(view==='2d'?'optimizer-map':'operational-3d-map')?.scrollIntoView({behavior:'smooth',block:'center'});
       });
-      ['lat','lon'].forEach(axis=>document.getElementById('op-'+kind+'-'+axis)?.addEventListener('input',()=>clearCoordinateError(kind)));
+      document.getElementById(prefix+'route')?.addEventListener('click',()=>calculateRoute(view));
+      ['start','target'].forEach(kind=>{
+        document.getElementById(prefix+kind+'-coordinates')?.addEventListener('submit',e=>{
+          e.preventDefault();const coord=readCoordinates(kind,prefix);if(coord)setCoordinatePoint(kind,coord);
+        });
+        ['lat','lon'].forEach(axis=>document.getElementById(prefix+kind+'-'+axis)?.addEventListener('input',()=>clearCoordinateError(kind)));
+        document.getElementById(prefix+'pick-'+kind)?.addEventListener('click',()=>{
+          setPickMode(kind,view);setStatus('คลิกบนแผนที่ '+view.toUpperCase()+' เพื่อกำหนด'+(kind==='start'?'จุดเริ่ม / staging':'จุดไฟ'),'loading');
+          document.getElementById(view==='2d'?'optimizer-map':'operational-3d-map')?.scrollIntoView({behavior:'smooth',block:'center'});
+        });
+      });
+      document.getElementById(prefix+'auto-start')?.addEventListener('click',()=>{
+        app.manualStart=null;setPickMode(null,null);writeCoordinates('start',null);clearRoute();showChosenPoints();setText('op-start-mode','Auto staging · nearest connected major road');setStatus('กลับไปใช้ Auto staging · กดคำนวณเส้นทาง','ready');
+      });
+      document.getElementById(prefix+'target')?.addEventListener('change',e=>{
+        app.targetId=e.target.value;setValue('op-target',app.targetId);setPickMode(null,null);clearRoute();const target=currentTarget();writeCoordinates('target',target?[target.lat,target.lon]:null);showChosenPoints();
+        setStatus(target?'เลือกเป้าหมายแล้ว · กดคำนวณเส้นทาง':'กรอกพิกัดจุดไฟแล้วกดใช้พิกัด หรือกดกำหนดจุดไฟบนแผนที่','ready');
+      });
+      document.getElementById(prefix+'profile')?.addEventListener('change',e=>{
+        setValue('op-profile',e.target.value);
+        if(app.currentRoute)calculateRoute(view);
+        else{clearRoute();showChosenPoints();setStatus('เปลี่ยนรูปแบบการเดินทางแล้ว · กดคำนวณเส้นทาง','ready');}
+      });
     });
-    document.getElementById('op-pick-start')?.addEventListener('click',()=>{app.pickMode='start';setStatus('คลิกบนแผนที่เพื่อกำหนดจุดเริ่ม / staging','loading');});
-    document.getElementById('op-auto-start')?.addEventListener('click',()=>{app.manualStart=null;app.pickMode=null;writeCoordinates('start',null);clearRoute();showChosenPoints();setText('op-start-mode','Auto staging · nearest connected major road');setStatus('กลับไปใช้ Auto staging · กดคำนวณเส้นทาง','ready');});
-    document.getElementById('op-pick-target')?.addEventListener('click',()=>{app.pickMode='target';setStatus('คลิกบนแผนที่เพื่อกำหนดจุดเหตุ / fire target','loading');});
-    document.getElementById('op-target')?.addEventListener('change',()=>{
-      app.pickMode=null;clearRoute();const target=currentTarget();writeCoordinates('target',target?[target.lat,target.lon]:null);showChosenPoints();
-      setStatus(target?'เลือกเป้าหมายแล้ว · กดคำนวณเส้นทาง':'กรอกพิกัดจุดไฟแล้วกดใช้พิกัด หรือกดกำหนดจุดไฟบนแผนที่','ready');
-    });
-    document.getElementById('op-profile')?.addEventListener('change',()=>{
-      if(app.currentRoute)calculateRoute();
-      else{clearRoute();showChosenPoints();setStatus('เปลี่ยนรูปแบบการเดินทางแล้ว · กดคำนวณเส้นทาง','ready');}
+    window.addEventListener('forestwatch:2d-point',e=>{
+      if(app.pickMode&&app.pickMap==='2d')setCoordinatePoint(app.pickMode,e.detail.coord);
     });
   }
 
   function init(state){
-    app.state=state;populateTargets();bindControls();createMap(state);
+    app.initialized=true;app.state=state;populateTargets();
+    try{createMap(state);}catch(err){setMapStatus('เปิดแผนที่ 3D ไม่สำเร็จ · ใช้แผนที่ 2D วางแผนเส้นทางได้','error');}
+    updateOperationalData(state);
   }
   function handle(state){
     if(!state)return;
-    if(!app.map)init(state);else updateOperationalData(state);
+    if(!app.initialized)init(state);else updateOperationalData(state);
   }
   function startTerrain(data){
     if(!data || app.state)return;
     handle({data,candidates:data.candidates||[],osm:{segments:[],support:[],barriers:[]},result:{nodes:[],gateways:[]},osmOK:false});
   }
+  bindControls();
   if(window.ForestWatchNetworkV4)startTerrain(window.ForestWatchNetworkV4);
   window.addEventListener('forestwatch:v4-ready',e=>startTerrain(e.detail));
   if(window.ForestWatchOptimizerV5State)handle(window.ForestWatchOptimizerV5State);
