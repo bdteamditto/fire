@@ -203,7 +203,7 @@
 .op-key.road{border-color:#f7d36d;box-shadow:0 -1px #28312c}
 .op-key.track{border-color:#e4a556;border-top-style:dashed}
 .op-key.path{border-color:#d8d1bd;border-top-style:dotted}
-.op-key.route{border-color:#67e39c;border-top-width:4px}
+.op-key.route{border-color:#67e39c;border-top-width:4px}.op-key.egress{border-color:#64c8e8;border-top-width:3px;border-top-style:dashed}
 .op-key.offroad{border-color:#f7ca5d;border-top-style:dashed}
 .op-key.blocked{border-color:#cc3f37;border-top-style:dashed}
 .op-command{padding:18px;background:#fbfcfb}
