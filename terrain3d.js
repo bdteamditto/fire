@@ -245,13 +245,17 @@
   }
 
   function createMap(state){
-    if(!window.maplibregl||!window.mlcontour){setStatus('โหลด MapLibre / contour engine ไม่สำเร็จ','error');return;}
+    if(!window.maplibregl){setStatus('โหลด MapLibre ไม่สำเร็จ · กรุณารีเฟรชหรือเช็กการบล็อก CDN','error');return;}
     const el=document.getElementById('operational-3d-map');if(!el)return;
-    const dem=new mlcontour.DemSource({
-      url:'https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png',
-      encoding:'terrarium',maxzoom:13,worker:true,cacheSize:140,timeoutMs:10000
-    });
-    dem.setupMaplibre(maplibregl);app.demSource=dem;
+    const demUrl='https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png';
+    const contourReady=!!window.mlcontour;
+    let dem=null,terrainTiles=[demUrl],contourTiles=null;
+    if(contourReady){
+      dem=new mlcontour.DemSource({url:demUrl,encoding:'terrarium',maxzoom:13,worker:true,cacheSize:140,timeoutMs:10000});
+      dem.setupMaplibre(maplibregl);app.demSource=dem;
+      terrainTiles=[dem.sharedDemProtocolUrl];
+      contourTiles=[dem.contourProtocolUrl({multiplier:1,thresholds:{10:[100,500],11:[100,500],12:[50,200],13:[25,100],14:[20,100],15:[10,50]},elevationKey:'ele',levelKey:'level',contourLayer:'contours'})];
+    }
     const b=state.data.bounds,c=state.data.center;
     const style={
       version:8,
@@ -259,8 +263,8 @@
       sources:{
         satellite:{type:'raster',tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],tileSize:256,maxzoom:19,attribution:'Esri World Imagery'},
         topo:{type:'raster',tiles:['https://a.tile.opentopomap.org/{z}/{x}/{y}.png'],tileSize:256,maxzoom:17,attribution:'OpenTopoMap / OpenStreetMap contributors'},
-        'terrain-dem':{type:'raster-dem',encoding:'terrarium',tiles:[dem.sharedDemProtocolUrl],maxzoom:13,tileSize:256},
-        contours:{type:'vector',tiles:[dem.contourProtocolUrl({multiplier:1,thresholds:{10:[100,500],11:[100,500],12:[50,200],13:[25,100],14:[20,100],15:[10,50]},elevationKey:'ele',levelKey:'level',contourLayer:'contours'})],maxzoom:15},
+        'terrain-dem':{type:'raster-dem',encoding:'terrarium',tiles:terrainTiles,maxzoom:13,tileSize:256},
+        ...(contourReady?{contours:{type:'vector',tiles:contourTiles,maxzoom:15}}:{}),
         roads:{type:'geojson',data:lineFC(state.osm.segments||[])},
         support:{type:'geojson',data:supportFC(state.osm.support||[])},
         barriers:{type:'geojson',data:barrierFC(state.osm.barriers||[])},
@@ -278,7 +282,7 @@
         {id:'topo',type:'raster',source:'topo',layout:{visibility:'none'},paint:{'raster-opacity':.95}},
         {id:'hillshade',type:'hillshade',source:'terrain-dem',paint:{'hillshade-exaggeration':.48,'hillshade-shadow-color':'#27342c','hillshade-highlight-color':'#f4eedf','hillshade-accent-color':'#566c5c'}},
         {id:'slope-screen',type:'fill',source:'slope-screen',layout:{visibility:'none'},paint:{'fill-color':['interpolate',['linear'],['get','slope'],15,'#f2e6a6',25,'#dc954d',35,'#b84a36',45,'#7d2633'],'fill-opacity':['interpolate',['linear'],['get','slope'],15,0,25,.16,35,.30,45,.42]}},
-        {id:'contour-minor',type:'line',source:'contours','source-layer':'contours',paint:{'line-color':'rgba(241,232,204,.62)','line-width':['match',['get','level'],1,1.25,.55]}},
+        ...(contourReady?[{id:'contour-minor',type:'line',source:'contours','source-layer':'contours',paint:{'line-color':'rgba(241,232,204,.62)','line-width':['match',['get','level'],1,1.25,.55]}}]:[]),
         {id:'roads-casing',type:'line',source:'roads',filter:['in',['get','kind'],['literal',['major','road']]],paint:{'line-color':'rgba(30,35,32,.82)','line-width':['match',['get','kind'],'major',6,4]}},
         {id:'roads',type:'line',source:'roads',filter:['in',['get','kind'],['literal',['major','road']]],paint:{'line-color':['match',['get','kind'],'major','#f7d36d','#f4f0e6'],'line-width':['match',['get','kind'],'major',3.8,2.3]}},
         {id:'tracks',type:'line',source:'roads',filter:['==',['get','kind'],'track'],paint:{'line-color':'#e4a556','line-width':2.2,'line-dasharray':[2,1.5]}},
@@ -305,7 +309,7 @@
     map.addControl(new maplibregl.ScaleControl({maxWidth:120,unit:'metric'}),'bottom-right');
     map.on('load',()=>{
       map.setTerrain({source:'terrain-dem',exaggeration:1.5});
-      setStatus('3D terrain พร้อม · Satellite + hillshade + contour + OSM access network','ready');
+      setStatus(contourReady?'3D terrain พร้อม · Satellite + hillshade + contour + OSM access network':'3D terrain พร้อม · contour engine ไม่พร้อม จึงแสดง terrain + hillshade + access network แทน','ready');
       updateOperationalData(state);
       bindMapInteractions();
       applyMode('terrain');
