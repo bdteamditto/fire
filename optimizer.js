@@ -116,46 +116,21 @@
       'nwr["aeroway"~"helipad|heliport"]('+bbox+');'+
       'way["natural"="water"]('+bbox+');'+
       ');out geom;';
-    const endpoints=['https://overpass-api.de/api/interpreter','https://overpass.private.coffee/api/interpreter'];
-    const cacheKey='forestwatch:osm-v1:'+query;
-    let lastError=null;
-    for(const endpoint of endpoints){
-      const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);
-      try{
-        const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:'data='+encodeURIComponent(query),signal:controller.signal});
-        if(!res.ok)throw new Error('Overpass '+res.status);
-        const json=await res.json(),fetchedAt=new Date().toISOString();
-        const osm=parseOSMResponse(json,{source:'live',fetchedAt,endpoint});
-        try{window.localStorage.setItem(cacheKey,JSON.stringify({query,json,fetchedAt,endpoint}));}catch(err){}
-        return osm;
-      }catch(err){lastError=err;}finally{clearTimeout(timeout);}
-    }
-    try{
-      const cached=JSON.parse(window.localStorage.getItem(cacheKey)||'null');
-      if(cached?.query===query&&Number.isFinite(Date.parse(cached.fetchedAt))){
-        return parseOSMResponse(cached.json,{source:'cache',fetchedAt:cached.fetchedAt,endpoint:cached.endpoint||''});
-      }
-    }catch(err){}
-    throw lastError||new Error('OSM access network unavailable');
-  }
-
-  function parseOSMResponse(json,metadata){
-    if(!Array.isArray(json?.elements)||!json.elements.length||json.remark)throw new Error('Overpass returned incomplete or empty data');
-    const segments=[],masts=[],barriers=[],support=[];
-    const validPoint=p=>p&&Number.isFinite(p.lat)&&Number.isFinite(p.lon)&&Math.abs(p.lat)<=90&&Math.abs(p.lon)<=180;
+    const endpoint='https://overpass-api.de/api/interpreter';
+    const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:'data='+encodeURIComponent(query)});
+    if(!res.ok)throw new Error('Overpass '+res.status);
+    const json=await res.json(),segments=[],masts=[],barriers=[],support=[];
     const centroid=e=>{
-      if(validPoint(e))return [e.lat,e.lon];
+      if(Number.isFinite(e.lat)&&Number.isFinite(e.lon))return [e.lat,e.lon];
       if(Array.isArray(e.geometry)&&e.geometry.length){
-        const pts=e.geometry.filter(validPoint);
+        const pts=e.geometry.filter(g=>Number.isFinite(g.lat)&&Number.isFinite(g.lon));
         if(pts.length)return [pts.reduce((a,b)=>a+b.lat,0)/pts.length,pts.reduce((a,b)=>a+b.lon,0)/pts.length];
       }
       return null;
     };
-    for(const e of json.elements){
-      if(!e||typeof e!=='object')continue;
-      const tags=e.tags&&typeof e.tags==='object'?e.tags:{};
-      if(Array.isArray(tags)||Object.values(tags).some(value=>typeof value!=='string'))continue;
-      if(e.type==='way'&&typeof tags.highway==='string'&&tags.highway&&Array.isArray(e.geometry)){
+    for(const e of json.elements||[]){
+      const tags=e.tags||{};
+      if(e.type==='way'&&tags.highway&&Array.isArray(e.geometry)){
         const hw=tags.highway,weight=HIGHWAY_WEIGHT[hw]||.65;
         const meta={
           wayId:e.id,hw,weight,name:tags.name||tags.ref||'',
@@ -163,7 +138,6 @@
           access:tags.access||'',motorVehicle:tags.motor_vehicle||tags.vehicle||'',oneway:tags.oneway||''
         };
         for(let i=1;i<e.geometry.length;i++){
-          if(!validPoint(e.geometry[i-1])||!validPoint(e.geometry[i]))continue;
           segments.push({...meta,a:[e.geometry[i-1].lat,e.geometry[i-1].lon],b:[e.geometry[i].lat,e.geometry[i].lon]});
         }
         continue;
@@ -184,8 +158,7 @@
       else if(tags.natural==='water')kind='Mapped water body';
       if(kind)support.push({lat:c[0],lon:c[1],kind,name:tags.name||'',tags});
     }
-    if(!segments.length)throw new Error('Overpass returned no valid road geometry');
-    return {segments,masts,barriers,support,...metadata};
+    return {segments,masts,barriers,support};
   }
 
   class MinHeap{
@@ -394,25 +367,8 @@
   function makeOptimizerMap(data){
     const el=document.getElementById('optimizer-map');if(!el||!window.L)return null;
     const b=data.bounds;
-    const existing=(data.existing||[]).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lon));
-    const existingCoordinates=existing.map(p=>[p.lat,p.lon]);
-    const map=L.map(el,{zoomControl:true,scrollWheelZoom:true,preferCanvas:true}).fitBounds(L.latLngBounds([[b.minLat,b.minLon],[b.maxLat,b.maxLon],...existingCoordinates]),{padding:[18,18]});
+    const map=L.map(el,{zoomControl:true,scrollWheelZoom:true}).fitBounds([[b.minLat,b.minLon],[b.maxLat,b.maxLon]],{padding:[18,18]});
     const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
-    map.createPane('optimizer-existing').style.zIndex='680';
-    const existingLayer=L.layerGroup().addTo(map);
-    existing.forEach(p=>{
-      const label=document.createElement('span');label.className='map-sensor existing'+(p.id==='EX-03'?' approximate':'');label.textContent=String(p.id||'EX');
-      label.style.width='38px';label.style.height='38px';label.style.fontSize='9px';
-      if(p.id==='EX-03')label.style.borderStyle='dashed';
-      const icon=L.divIcon({className:'plan-leaflet-icon',html:label,iconSize:[38,38],iconAnchor:[19,19]});
-      const box=document.createElement('div'),title=document.createElement('b'),coord=document.createElement('div'),note=document.createElement('div');
-      title.textContent='เซ็นเซอร์เดิม · '+p.id;
-      coord.textContent=p.lat.toFixed(6)+', '+p.lon.toFixed(6);
-      note.textContent=p.note||(p.id==='EX-03'?'ตำแหน่งประมาณจากแผนที่เดิม — รอพิกัดจริง':'พิกัดเซ็นเซอร์เดิม');
-      box.append(title,coord,note);
-      L.marker([p.lat,p.lon],{icon,pane:'optimizer-existing',zIndexOffset:1000,bubblingMouseEvents:true}).addTo(existingLayer).bindTooltip(box);
-    });
-    el.dataset.existingCount=String(existing.length);
     let worldCover=null;
     try{
       worldCover=L.tileLayer.wms('https://services.terrascope.be/wms/v2',{
@@ -420,15 +376,17 @@
         attribution:'© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021)'
       });
       worldCover.addTo(map);
+      L.control.layers({'OpenStreetMap':osm},{'WorldCover 2021 (visual)':worldCover},{collapsed:true}).addTo(map);
     }catch(e){}
-    const overlays={['เซ็นเซอร์เดิม ('+existing.length+' จุดสีเขียว)']:existingLayer};
-    if(worldCover)overlays['WorldCover 2021 (visual)']=worldCover;
-    const layerControl=L.control.layers({'OpenStreetMap':osm},overlays,{collapsed:true}).addTo(map);
+    const existingLayer=L.layerGroup().addTo(map);
+    (data.existing||[]).forEach(sensor=>{
+      const label=document.createElement('span');label.className='map-sensor existing';label.textContent=sensor.id;
+      const icon=L.divIcon({className:'plan-leaflet-icon',html:label.outerHTML,iconSize:[34,34],iconAnchor:[17,17]});
+      const detail=document.createElement('div');detail.textContent=sensor.id+' · เซ็นเซอร์เดิม · '+sensor.note;
+      L.marker([sensor.lat,sensor.lon],{icon,zIndexOffset:1000}).addTo(existingLayer).bindTooltip(detail);
+    });
     if(window.ResizeObserver){const ro=new ResizeObserver(()=>map.invalidateSize({pan:false}));ro.observe(el);}
-    const mapState={map,element:el,worldCover,layerControl,existingLayer,existingCoordinates,nodeLayer:L.layerGroup().addTo(map),gatewayLayer:L.layerGroup().addTo(map),linkLayer:L.layerGroup().addTo(map)};
-    window.ForestWatchOptimizerMap=mapState;
-    window.dispatchEvent(new CustomEvent('forestwatch:optimizer-map-ready',{detail:mapState}));
-    return mapState;
+    return {map,worldCover,nodeLayer:L.layerGroup().addTo(map),gatewayLayer:L.layerGroup().addTo(map),linkLayer:L.layerGroup().addTo(map)};
   }
 
   function drawResult(mapState,result){
@@ -438,21 +396,21 @@
     const roleColor={RS:'#5b4f81',FU:'#2f765e',WX:'#477aa0',AQ:'#b65b33'};
     result.nodes.forEach((n,i)=>{
       const icon=L.divIcon({className:'plan-leaflet-icon',html:'<span class="opt-node" style="background:'+roleColor[n.role]+'">'+ROLE[n.role].short[0]+String(i+1)+'</span>',iconSize:[34,34],iconAnchor:[17,17]});
-      L.marker([n.p.lat,n.p.lon],{icon,bubblingMouseEvents:true}).addTo(nodeLayer).bindTooltip(
-        'จุดเสนอใหม่ · '+ROLE[n.role].label+' · utility '+Math.round(n.utility)+'<br>'+
+      L.marker([n.p.lat,n.p.lon],{icon}).addTo(nodeLayer).bindTooltip(
+        ROLE[n.role].label+' · utility '+Math.round(n.utility)+'<br>'+
         (n.p.landcover||'WorldCover unavailable')+' · road '+(Number.isFinite(n.p.roadDistanceKm)?Math.round(n.p.roadDistanceKm*1000)+' m':'—')
       );
     });
     result.gateways.forEach((g,gi)=>{
       const icon=L.divIcon({className:'plan-leaflet-icon',html:'<span class="opt-gateway">GW'+(gi+1)+'</span>',iconSize:[42,42],iconAnchor:[21,21]});
-      L.marker([g.p.lat,g.p.lon],{icon,bubblingMouseEvents:true}).addTo(gatewayLayer).bindTooltip(g.id+' · radio planning proxy');
+      L.marker([g.p.lat,g.p.lon],{icon}).addTo(gatewayLayer).bindTooltip(g.id+' · radio planning proxy');
       L.circle([g.p.lat,g.p.lon],{radius:result.rangeKm*1000,color:'#6c5b3d',weight:1,dashArray:'5 5',fillOpacity:.025}).addTo(gatewayLayer);
       g.coverIdx.forEach(idx=>{
         const n=result.nodes[idx];
         if(n)L.polyline([[g.p.lat,g.p.lon],[n.p.lat,n.p.lon]],{color:'#8d7b58',weight:1,opacity:.38,dashArray:'3 5'}).addTo(linkLayer);
       });
     });
-    const pts=[...result.nodes.map(n=>[n.p.lat,n.p.lon]),...result.gateways.map(g=>[g.p.lat,g.p.lon]),...mapState.existingCoordinates];
+    const pts=[...result.nodes.map(n=>[n.p.lat,n.p.lon]),...result.gateways.map(g=>[g.p.lat,g.p.lon])];
     if(pts.length)map.fitBounds(L.latLngBounds(pts).pad(.16),{padding:[18,18]});
   }
 
@@ -510,7 +468,6 @@
 
   async function init(data){
     const root=document.getElementById('budget-optimizer');if(!root)return;
-    const mapState=makeOptimizerMap(data);
     status('opt-worldcover-status','กำลังอ่าน WorldCover 2021 COG…');
     status('opt-osm-status','กำลังอ่าน OSM roads / mapped towers…');
     status('opt-radio-status','รอข้อมูล candidate…');
@@ -522,11 +479,7 @@
         candidates.forEach(p=>{p.landcover=null;p.fuelScore=50;p.landcoverSiteScore=50;});
         status('opt-worldcover-status','WorldCover COG โหลดไม่ได้ · ใช้ค่า neutral 50 และไม่อ้างว่าเป็น land-cover analysis','error');
       }),
-      fetchOSM(data.bounds).then(x=>{
-        osm=x;enrichAccess(candidates,osm);osmOK=true;
-        const source=osm.source==='cache'?'ข้อมูลสำรองที่บันทึกไว้ '+new Intl.DateTimeFormat('th-TH',{timeZone:'Asia/Bangkok',dateStyle:'short',timeStyle:'short'}).format(new Date(osm.fetchedAt)):'ข้อมูลล่าสุดจาก '+new URL(osm.endpoint).hostname;
-        status('opt-osm-status','OSM พร้อม · '+source+' · '+osm.segments.length.toLocaleString()+' road segments · '+(osm.graphNodeCount||0).toLocaleString()+' route nodes · '+osm.support.length+' support points','ready');
-      }).catch(err=>{
+      fetchOSM(data.bounds).then(x=>{osm=x;osmOK=true;enrichAccess(candidates,osm);status('opt-osm-status','OSM พร้อม · '+osm.segments.length.toLocaleString()+' road segments · '+(osm.graphNodeCount||0).toLocaleString()+' route nodes · '+osm.support.length+' support points','ready');}).catch(err=>{
         candidates.forEach(p=>{p.roadDistanceKm=null;p.roadType='—';p.accessScore=50;p.backhaulScore=45;});
         status('opt-osm-status','OSM/Overpass โหลดไม่ได้ · access score เป็น neutral 50','error');
       })
@@ -535,6 +488,7 @@
     candidates.forEach(p=>p.v5Score=finalCandidateScore(p));
     status('opt-radio-status','Gateway ใช้ elevation + OSM access + coverage proxy · ไม่ใช่ RF/LOS model','ready');
     setText('opt-data-summary',(data.demLoaded?'DEM ✓':'DEM fallback')+' · '+(wcOK?'WorldCover ✓':'WorldCover fallback')+' · '+(osmOK?'OSM ✓':'OSM fallback'));
+    const mapState=makeOptimizerMap(data);
     let latest=null;
     function run(){
       latest=optimize(candidates);drawResult(mapState,latest);renderBOQ(latest);renderSites(latest);
