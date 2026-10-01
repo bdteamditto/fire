@@ -45,7 +45,7 @@
     const toXY=q=>({x:(q[1]-p[1])*111.32*Math.cos(lat0),y:(q[0]-p[0])*110.57});
     const A=toXY(a),B=toXY(b),vx=B.x-A.x,vy=B.y-A.y;
     const den=vx*vx+vy*vy;
-    const t=den?clamp((-(A.x)*vx-(A.y)*vy)/den,0,1)/100:0;
+    const t=den?Math.max(0,Math.min(1,((-(A.x)*vx-(A.y)*vy)/den))):0;
     const x=A.x+t*vx,y=A.y+t*vy;
     return Math.sqrt(x*x+y*y);
   }
