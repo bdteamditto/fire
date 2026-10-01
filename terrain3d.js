@@ -258,7 +258,7 @@
       glyphs:'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
       sources:{
         satellite:{type:'raster',tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],tileSize:256,maxzoom:19,attribution:'Esri World Imagery'},
-        topo:{type:'raster',tiles:['https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'],tileSize:256,maxzoom:17,attribution:'OpenTopoMap / OpenStreetMap contributors'},
+        topo:{type:'raster',tiles:['https://a.tile.opentopomap.org/{z}/{x}/{y}.png'],tileSize:256,maxzoom:17,attribution:'OpenTopoMap / OpenStreetMap contributors'},
         'terrain-dem':{type:'raster-dem',encoding:'terrarium',tiles:[dem.sharedDemProtocolUrl],maxzoom:13,tileSize:256},
         contours:{type:'vector',tiles:[dem.contourProtocolUrl({multiplier:1,thresholds:{10:[100,500],11:[100,500],12:[50,200],13:[25,100],14:[20,100],15:[10,50]},elevationKey:'ele',levelKey:'level',contourLayer:'contours'})],maxzoom:15},
         roads:{type:'geojson',data:lineFC(state.osm.segments||[])},
@@ -304,7 +304,7 @@
     map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
     map.addControl(new maplibregl.ScaleControl({maxWidth:120,unit:'metric'}),'bottom-right');
     map.on('load',()=>{
-      map.setTerrain({source:'terrain-dem',exaggeration:1.45});
+      map.setTerrain({source:'terrain-dem',exaggeration:1.5});
       setStatus('3D terrain พร้อม · Satellite + hillshade + contour + OSM access network','ready');
       updateOperationalData(state);
       bindMapInteractions();
