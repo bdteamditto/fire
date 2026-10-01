@@ -469,10 +469,24 @@
     window.ForestWatchNetworkV4={
       mode:'DEM_DRIVEN_PLANNING_DEMO',
       demLoaded,
-      candidates:grid.map(p=>({lat:p.lat,lon:p.lon,score:Math.round(p.baseScore)})),
-      selected:selected.map(p=>({id:p.id,lat:p.lat,lon:p.lon,role:p.role,phase:p.phase,score:Math.round(p.totalScore),zone:p.zone})),
-      historicalHotspots:hotspots
+      bounds:{minLat,maxLat,minLon,maxLon},
+      center,
+      wind:{fromDeg:windFromDeg,toDeg:windToDeg,speedMs:windSpeedMs},
+      candidates:grid.map(p=>({
+        lat:p.lat,lon:p.lon,score:p.baseScore,
+        elev:p.elev,slope:p.slope,aspect:p.aspect,relief:p.relief,
+        terrainScore:p.terrainScore,ridgeScore:p.ridgeScore,valleyScore:p.valleyScore,
+        riskScore:p.riskScore,smokeScore:p.smokeScore,coverageScore:p.coverageScore,
+        boundaryScore:p.boundaryScore
+      })),
+      selected:selected.map(p=>({
+        id:p.id,lat:p.lat,lon:p.lon,role:p.role,roleCode:p.roleCode,phase:p.phase,
+        score:p.totalScore,zone:p.zone,pkg:p.pkg
+      })),
+      existing:existing.map(p=>({...p})),
+      historicalHotspots:hotspots.map(p=>({...p}))
     };
+    window.dispatchEvent(new CustomEvent('forestwatch:v4-ready',{detail:window.ForestWatchNetworkV4}));
   }
   bootstrap();
 })();
