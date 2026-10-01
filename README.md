@@ -77,3 +77,53 @@ Network Plan เปลี่ยนจากการสร้าง N8–N21 ด
 หาก Open-Meteo Elevation API ใช้งานไม่ได้ หน้า Network Plan จะ fallback ไปใช้ wind + historical risk + network geometry และแสดงสถานะชัดเจนว่า DEM ไม่พร้อม แทนการสร้างค่า elevation ปลอม
 
 Data attribution: Open-Meteo Elevation API / Copernicus DEM 2021 GLO-90, Esri Topographic, OpenTopoMap, OpenStreetMap.
+
+## Version 5 — WorldCover + OSM + Gateway + Budget optimizer
+
+Version 5 ต่อจาก DEM-driven planning โดยเพิ่มข้อมูลและข้อจำกัดด้านการติดตั้งจริงเข้าในตัวเลือกเครือข่าย
+
+### ข้อมูลที่ optimizer ใช้
+
+- **Copernicus DEM / Open-Meteo Elevation**: ใช้ elevation และตัวแปร terrain จาก Version 4
+- **ESA WorldCover 2021 v200**: อ่าน land-cover class จาก Cloud Optimized GeoTIFF (COG) บน AWS Open Data; ใช้ Tree cover / Shrubland / Grassland / Cropland ฯลฯ เป็น fuel-context และ siting-context score
+- **OpenStreetMap / Overpass API**: คำนวณระยะ candidate ถึง highway / track / path และอ่าน mast/tower ที่มี tag ใน OSM เพื่อเป็น backhaul context
+- **Historical H-01 / H-02 / H-03**: ใช้เป็น validation/risk context ไม่ใช่จุดศูนย์กลางของ network
+- **Network geometry**: ใช้ spacing / coverage gain เพื่อไม่ให้ sensor ซ้ำตำแหน่งกันมากเกินไป
+- **Gateway planning proxy**: เลือก gateway candidate จาก elevation + OSM access + node coverage + tagged mast proximity หากมี
+
+WorldCover WMS ที่แสดงบน optimizer map เป็น **visual overlay เท่านั้น**; การให้คะแนน land cover ใช้ค่าจาก COG โดยตรง เนื่องจาก WMS เป็น RGB imagery และไม่เหมาะสำหรับวิเคราะห์ class value.
+
+### Budget optimizer
+
+ผู้ใช้กำหนดงบประมาณรวม VAT, objective และ planning radio range แล้วระบบเลือกจำนวน/ตำแหน่งของ
+
+- Reference / Super Station
+- Fusion node
+- Weather node
+- AQ / Smoke node
+- Gateway planning sites
+
+ผลลัพธ์มี BOQ และ selected-site table พร้อม export CSV.
+
+ราคาที่ hard-code เป็นราคาก่อน VAT จาก quotation **QT2609099**:
+
+- RK900-12ABAM5++ = 62,000 บาท
+- RK120-01CAB2500 = 12,500 บาท
+- RK330-01ADB3000 = 5,200 บาท
+- RK300-02DBBA3000 = 7,800 บาท
+
+Fusion package ใน Version 5 คิดจาก RK120-01 + RK330-01 + RK300-02. AQ package คิดจาก RK300-02. Weather package คิดจาก RK120-01 + RK330-01. Super Station ใช้ RK900-12ABAM5++.
+
+**ไม่เดาราคาที่ไม่มีใน quotation:** Gateway, pole, solar/battery, enclosure, civil work, cabling, SIM/data plan, installation, calibration, maintenance และ RK300-08 multi-gas จะแสดงเป็น editable allowance หรือยังไม่รวมใน BOQ จนกว่าจะมีราคาอ้างอิง.
+
+### Radio / gateway limitation
+
+วง gateway เป็นระยะ planning ที่ผู้ใช้กำหนดเอง ไม่ใช่ RF coverage ที่รับรองแล้ว. Version 5 ยังไม่ได้ใช้ antenna gain, frequency, Fresnel clearance, vegetation attenuation, tower height, terrain line-of-sight หรือ field RSSI test จึงต้องทำ RF/site survey ก่อนออกแบบก่อสร้างจริง.
+
+### Fallback behavior
+
+- ถ้า WorldCover COG โหลดไม่ได้: land-cover score ใช้ neutral 50 และ UI ระบุว่า WorldCover unavailable
+- ถ้า Overpass โหลดไม่ได้: access/backhaul score ใช้ neutral value และ UI ระบุว่า OSM unavailable
+- ถ้า DEM จาก Version 4 ไม่พร้อม: optimizer ยังทำงานได้ แต่ confidence ลดลงตามข้อมูลที่ขาด
+
+Data attribution: ESA WorldCover 2021 v200 (CC-BY 4.0), OpenStreetMap contributors, Copernicus DEM / Open-Meteo Elevation API.
