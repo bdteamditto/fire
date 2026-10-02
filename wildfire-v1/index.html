@@ -1,6 +1,6 @@
 <!doctype html>
-<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="แผนที่ภูมิประเทศสามมิติ เส้นทางเข้าถึง และแผนเครือข่ายเซนเซอร์สำหรับเฝ้าระวังไฟป่า · ข้อมูลสำหรับวางแผน ไม่ใช่ข้อมูลเตือนภัยจริง"><title>wildfire v.1 | ศูนย์เฝ้าระวังไฟป่า</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b493b'/%3E%3Cpath d='M16 5L5 23h22Z' fill='%238edf8f'/%3E%3Cpath d='M16 18v10' stroke='white' stroke-width='3'/%3E%3C/svg%3E"><link rel="stylesheet" href="../style.css?v=wildfire-v1"><link rel="stylesheet" href="../vendor/leaflet/leaflet.css" crossorigin=""><link rel="stylesheet" href="../vendor/maplibre/maplibre-gl.css?v=5.6.2"><link rel="stylesheet" href="presentation.css?v=shared-planned-sites"></head>
-<body><header class="topbar"><div class="brand"><span class="brandmark" aria-hidden="true">▲</span><div><b>wildfire v.1</b><span>ศูนย์เฝ้าระวังไฟป่า · พื้นที่สาธิต 2 กม.</span></div></div><div class="headright"><span class="demotag">DEMO · ข้อมูลจำลอง</span></div></header>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="แผนที่ภูมิประเทศสามมิติ เส้นทางเข้าถึง และแผนเครือข่ายเซนเซอร์สำหรับเฝ้าระวังไฟป่า · ข้อมูลสำหรับวางแผน ไม่ใช่ข้อมูลเตือนภัยจริง"><title>WILDFIRE V.01 | ศูนย์เฝ้าระวังไฟป่า</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b493b'/%3E%3Cpath d='M16 5L5 23h22Z' fill='%238edf8f'/%3E%3Cpath d='M16 18v10' stroke='white' stroke-width='3'/%3E%3C/svg%3E"><link rel="stylesheet" href="../style.css?v=wildfire-v1"><link rel="stylesheet" href="../vendor/leaflet/leaflet.css" crossorigin=""><link rel="stylesheet" href="../vendor/maplibre/maplibre-gl.css?v=5.6.2"><link rel="stylesheet" href="presentation.css?v=shared-planned-sites"></head>
+<body><header class="topbar"><div class="brand"><span class="brandmark" aria-hidden="true">▲</span><div><b>WILDFIRE V.01</b><span>ศูนย์เฝ้าระวังไฟป่า · พื้นที่สาธิต 2 กม.</span></div></div><div class="headright"><span class="demotag">DEMO · ข้อมูลจำลอง</span></div></header>
 <main>
 <section class="operational-3d" id="operational-3d">
   <div class="panelhead op-head">
@@ -20,12 +20,12 @@
     <div class="point-view-buttons" role="group" aria-label="กลุ่มจุด">
       <button type="button" data-point-view="all" class="active" aria-pressed="true">แสดงทั้งหมด</button>
       <button type="button" data-point-view="sensors" aria-pressed="false">เฉพาะเซนเซอร์</button>
-      <button type="button" data-point-view="hotspots" aria-pressed="false">เฉพาะจุดไฟ</button>
+      <button type="button" data-point-view="hotspots" aria-pressed="false">เฉพาะจุดเสี่ยง</button>
     </div>
     <label for="op-sensor-type">ประเภทเซนเซอร์</label>
     <select id="op-sensor-type" data-sensor-type>
       <option value="all">ทุกประเภท</option>
-      <option value="EX">เซนเซอร์เดิม (สีเขียว)</option>
+      <option value="EX">Existing Sensors · สีเขียว</option>
       <option value="RS">สถานีอ้างอิง / Super Station</option>
       <option value="FU">Fusion Node</option>
       <option value="RW">Weather บนสันเขา / ช่องเขา</option>
@@ -171,12 +171,12 @@
     <div class="point-view-buttons" role="group" aria-label="กลุ่มจุด">
       <button type="button" data-point-view="all" class="active" aria-pressed="true">แสดงทั้งหมด</button>
       <button type="button" data-point-view="sensors" aria-pressed="false">เฉพาะเซนเซอร์</button>
-      <button type="button" data-point-view="hotspots" aria-pressed="false">เฉพาะจุดไฟ</button>
+      <button type="button" data-point-view="hotspots" aria-pressed="false">เฉพาะจุดเสี่ยง</button>
     </div>
     <label for="plan-sensor-type">ประเภทเซนเซอร์</label>
     <select id="plan-sensor-type" data-sensor-type>
       <option value="all">ทุกประเภท</option>
-      <option value="EX">เซนเซอร์เดิม (สีเขียว)</option>
+      <option value="EX">Existing Sensors · สีเขียว</option>
       <option value="RS">สถานีอ้างอิง / Super Station</option>
       <option value="FU">Fusion Node</option>
       <option value="RW">Weather บนสันเขา / ช่องเขา</option>
@@ -271,7 +271,7 @@
 
 
 <details class="method"><summary>ข้อมูลที่ใช้และขอบเขตของเดโม</summary><p>เดโม playback เดิมใช้ Copernicus GLO-30, ESA WorldCover 2021 และ OpenStreetMap ตำแหน่ง Weather 100 และ AQ 100 เป็นจุดเสนอสำหรับเดโม ค่าควัน สถานะการสื่อสาร และลำดับเหตุการณ์สังเคราะห์ทั้งหมด ไม่ได้เชื่อมอุปกรณ์จริง</p><p>Sensor Network Plan ใช้ DEM-driven candidate selection ส่วน Version 6 เพิ่ม 3D terrain, contour, road/track/path, mapped barrier/support point และ Access/Egress routing. ทุกพิกัดและ route ยังเป็น planning support ไม่ใช่ construction coordinate หรือ tactical fire-suppression instruction</p><p>ลม 2.18 m/s จาก 261° มาจาก ERA5 วันที่ 15 มี.ค. 2025 เวลา 14:00 น. เป็นข้อมูลระดับภูมิภาคที่นำมาใช้คงที่ในฉากนี้ ไม่ใช่ลมปัจจุบันหรือการวัดครบ 100 สถานี กติกาควันผิดปกติ: ΔPM2.5 &gt;25 µg/m³ และ ΔCO &gt;0.2 ppm เทียบฐานสมมติ 15 µg/m³ / 0.15 ppm ไม่ใช่เกณฑ์สุขภาพหรือเกณฑ์ปฏิบัติการที่สอบเทียบแล้ว</p><p>โซนสีส้มเป็นกรอบห้อมกลุ่ม AQ ที่ผิดปกติ ไม่ใช่การย้อนคำนวณจุดต้นเพลิง แนวไฟลาม 15/30/60 นาทีเป็นแบบจำลองอย่างง่ายที่ยังไม่สอบเทียบ จึงไม่แสดงเวลาปลอดภัย เส้นทางเข้าดับไฟ หรือค่าความรุนแรงของไฟ</p><p>ข้อมูลเก่าหรือขาดการติดต่อแสดงเป็นสีเทาและไม่นับเป็นหลักฐานยืนยันควัน ต้องแยก “ไม่มีสัญญาณผิดปกติ” ออกจาก “ไม่มีข้อมูล” การรับทราบอยู่เฉพาะหน้านี้และรีเซ็ตเมื่อเปลี่ยนฉาก ยังไม่มีบันทึกเหตุส่วนกลางหรือการแจ้งเตือนจริง</p><p>FIRMS snapshot เดิม 16–23 ก.ย. 2026 ไม่มีจุดในรัศมี 25 กม. จึงไม่นำมาปนกับฉากย้อนหลังนี้ แผนเชื่อมข้อมูลจริง: sensor → LoRaWAN/cellular → MQTT/API → ตรวจคุณภาพและอายุข้อมูล → dashboard ผ่าน SSE/WebSocket โดยต้องเพิ่มบริการรับข้อมูลก่อน</p><p>© OpenStreetMap contributors · © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium · Copernicus DEM · Open-Meteo / ERA5</p><a href="https://registry.opendata.aws/copernicus-dem/">Copernicus DEM</a> · <a href="https://esa-worldcover.org/en/data-access">WorldCover</a> · <a href="https://www.openstreetmap.org/copyright">OSM</a> · <a href="https://open-meteo.com/en/docs/historical-weather-api">ERA5 / Open-Meteo</a></details>
-<footer><span>wildfire v.1 · หน้าจอสาธิตสำหรับเจ้าหน้าที่</span></footer></main>
+<footer><span>WILDFIRE V.01 · หน้าจอสาธิตสำหรับเจ้าหน้าที่</span></footer></main>
 <script src="../vendor/leaflet/leaflet.js" crossorigin=""></script>
 <script src="point-filters.js?v=shared-planned-sites"></script>
 <script src="network-plan.js?v=shared-planned-sites"></script>
