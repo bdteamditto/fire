@@ -192,6 +192,20 @@
       const pick=options[0]||roleDefs[0];
       p.role=pick.name;p.roleCode=pick.code;counts[pick.code]++;
     }
+    // Repair strongly contradicted terrain roles without moving or renumbering selected sites.
+    if(points.every(p=>Number.isFinite(p.relief))){
+      const swapRoles=(a,b)=>{[a.role,b.role]=[b.role,a.role];[a.roleCode,b.roleCode]=[b.roleCode,a.roleCode];};
+      for(const p of points.filter(p=>p.roleCode==='RW'&&p.relief<-9)){
+        const replacement=points.filter(q=>!['RS','RW'].includes(q.roleCode)&&q.relief>9)
+          .sort((a,b)=>b.ridgeScore-a.ridgeScore||(b.roleCode==='FU')-(a.roleCode==='FU'))[0];
+        if(replacement)swapRoles(p,replacement);
+      }
+      for(const p of points.filter(p=>p.roleCode==='VW'&&p.relief>9)){
+        const replacement=points.filter(q=>!['RS','RW','VW'].includes(q.roleCode)&&q.relief<-9)
+          .sort((a,b)=>b.valleyScore-a.valleyScore)[0];
+        if(replacement)swapRoles(p,replacement);
+      }
+    }
     const packages={
       RS:'RK900-12: WS/WD + T/RH + Pressure + Rain + PM2.5/PM10 reference',
       FU:'RK120-01 WS/WD + T/RH + RK300-02 PM2.5/PM10 + CO / multi-gas',
@@ -218,7 +232,7 @@
     if(rel>9) form='ridge / convex high ground';
     else if(rel<-9) form='valley / concave drainage';
     else if((p.slope||0)>18) form='steep slope';
-    return form+' · relief '+rel.toFixed(1)+' m';
+    return 'terrain proxy · '+form+' · relief '+rel.toFixed(1)+' m';
   }
 
   function detectionFor(h,selected) {
@@ -264,14 +278,35 @@
 
   const mapStatus=document.getElementById('plan-map-status');
   function setStatus(msg,state='loading'){if(mapStatus){mapStatus.textContent=msg;mapStatus.dataset.state=state;}}
-  let selected=[],grid=[],demLoaded=false,demStatus='pending';
+  let selected=[],grid=[],demLoaded=false,demStatus='pending',demCachedAt=null,planRevision=0,updatedAt=null,renderUpdatedPlan=null;
+  const terrainCacheKey='forestwatch:v1:dem:original-grid-180m:'+rows+'x'+cols+':'+[minLat,minLon,maxLat,maxLon].map(n=>n.toFixed(6)).join(',');
+  function readTerrainCache(){
+    try{
+      const value=JSON.parse(localStorage.getItem(terrainCacheKey)||'null'),expected=createGrid();
+      if(value?.version!==1||!Number.isFinite(value.savedAt)||!Number.isFinite(new Date(value.savedAt).getTime())||!Array.isArray(value.grid)||value.grid.length!==expected.length)return null;
+      const valid=value.grid.every((p,i)=>
+        Number.isFinite(p.lat)&&Number.isFinite(p.lon)&&Math.abs(p.lat-expected[i].lat)<1e-9&&Math.abs(p.lon-expected[i].lon)<1e-9&&
+        ['elev','slope','aspect','relief'].every(key=>Number.isFinite(p[key]))&&p.slope>=0&&p.slope<=90&&p.aspect>=0&&p.aspect<360
+      );
+      if(!valid)return null;
+      return {grid:expected.map((p,i)=>({...p,elev:value.grid[i].elev,slope:value.grid[i].slope,aspect:value.grid[i].aspect,relief:value.grid[i].relief})),savedAt:value.savedAt};
+    }catch(_){return null;}
+  }
+  function saveTerrainCache(){
+    const savedAt=Date.now();
+    try{localStorage.setItem(terrainCacheKey,JSON.stringify({version:1,savedAt,source:'Copernicus GLO-90 via Open-Meteo',grid,selected}));}catch(_){}
+    return new Date(savedAt).toISOString();
+  }
   function publishNetworkData(){
+    planRevision++;
+    if(!updatedAt)updatedAt=new Date().toISOString();
     window.ForestWatchNetworkV4={
       mode:'DEM_DRIVEN_PLANNING_DEMO',
-      demLoaded,demStatus,
+      demLoaded,demStatus,demCachedAt,planRevision,updatedAt,
       provenance:{
-        terrain:{source:demLoaded?'Copernicus GLO-90 via Open-Meteo':'wind/risk/network geometry fallback',status:demStatus},
-        network:'Original 21-point Network Plan selection algorithm; 3 existing reference points unchanged'
+        terrain:{source:demLoaded?'Copernicus GLO-90 via Open-Meteo':'wind/risk/network geometry fallback',status:demStatus,cachedAt:demCachedAt},
+        network:'Original 21-point Network Plan selection algorithm shared by 2D and 3D; 3 existing reference points unchanged',
+        selection:{revision:planRevision,updatedAt,algorithm:'Original terrain + wind + historical risk + geometry selection',roleValidation:demLoaded?'Contradicted ridge/valley roles exchanged using relief proxy without moving selected sites':'Terrain roles provisional while DEM is unavailable'}
       },
       bounds:{minLat,maxLat,minLon,maxLon},center,
       wind:{fromDeg:windFromDeg,toDeg:windToDeg,speedMs:windSpeedMs},
@@ -284,14 +319,40 @@
       })),
       selected:selected.map(p=>({
         id:p.id,lat:p.lat,lon:p.lon,role:p.role,roleCode:p.roleCode,phase:p.phase,
-        score:p.totalScore,zone:p.zone,pkg:p.pkg
+        score:p.totalScore,zone:p.zone,pkg:p.pkg,roleDesc:p.roleDesc,
+        elev:p.elev,slope:p.slope,aspect:p.aspect,relief:p.relief,
+        terrainScore:p.terrainScore,ridgeScore:p.ridgeScore,valleyScore:p.valleyScore,
+        riskScore:p.riskScore,smokeScore:p.smokeScore,coverageScore:p.coverageScore,boundaryScore:p.boundaryScore,
+        confidence:p.confidence,terrainInterpretation:terrainText(p,demLoaded)
       })),
       existing:existing.map(p=>({...p})),historicalHotspots:hotspots.map(p=>({...p}))
     };
     window.dispatchEvent(new CustomEvent('forestwatch:v4-ready',{detail:window.ForestWatchNetworkV4}));
   }
+  async function refreshTerrain(){
+    const terrainGrid=createGrid(),controller=new AbortController();
+    let timeout;
+    try{
+      await Promise.race([
+        enrichGrid(terrainGrid,controller.signal),
+        new Promise((_,reject)=>{timeout=setTimeout(()=>{controller.abort();reject(new Error('Elevation deadline exceeded'));},14000);})
+      ]);
+      grid=terrainGrid;demLoaded=true;demStatus='ready';updatedAt=new Date().toISOString();
+      addScores(grid,true);selected=selectNetwork(grid);demCachedAt=saveTerrainCache();
+      setStatus('DEM พร้อม · อัปเดต network 21 จุดชุดเดียวกันบนแผนที่ 2D และ 3D','ready');
+    }catch(err){
+      demStatus=demLoaded?'cached':'unavailable';
+      setStatus(demLoaded?'อัปเดต DEM ไม่สำเร็จ · คง network ล่าสุดจาก DEM ที่บันทึกไว้':'DEM ไม่พร้อมภายในเวลาที่กำหนด · ใช้ fallback จาก wind + historical risk + network geometry',demLoaded?'ready':'error');
+    }finally{clearTimeout(timeout);controller.abort();}
+    publishNetworkData();
+    if(renderUpdatedPlan)renderUpdatedPlan();
+  }
   // Publish usable geometry before either the map library or an elevation request is needed.
-  grid=createGrid();addScores(grid,false);selected=selectNetwork(grid);publishNetworkData();
+  const cachedTerrain=readTerrainCache();
+  grid=cachedTerrain?cachedTerrain.grid:createGrid();demLoaded=!!cachedTerrain;
+  if(cachedTerrain){demStatus='cached';demCachedAt=new Date(cachedTerrain.savedAt).toISOString();updatedAt=demCachedAt;}
+  addScores(grid,demLoaded);selected=selectNetwork(grid);publishNetworkData();
+  void refreshTerrain();
   if(!window.L||!document.getElementById('network-map')){
     setStatus('แผนที่ Network Plan ไม่พร้อม · ส่งข้อมูล fallback ให้แผนที่ 3D แล้ว','error');
     return;
@@ -320,13 +381,19 @@
   const refLayer=L.layerGroup().addTo(map);
   const markerMap=new Map();
 
-  for(const e of existing){
-    const icon=L.divIcon({className:'plan-leaflet-icon',html:'<span class="map-sensor existing">'+e.id.replace('EX-','E')+'</span>',iconSize:[38,38],iconAnchor:[19,19]});
-    L.marker([e.lat,e.lon],{icon}).addTo(refLayer).bindTooltip(e.id+' · Sensor เดิม').on('click',()=>showReference(e));
-  }
-  for(const h of hotspots){
-    const icon=L.divIcon({className:'plan-leaflet-icon',html:'<span class="map-hotspot">●</span>',iconSize:[28,28],iconAnchor:[14,14]});
-    L.marker([h.lat,h.lon],{icon}).addTo(refLayer).bindTooltip(h.id+' · historical hotspot · FRP '+h.frp).on('click',()=>showHotspot(h));
+  function pointMatches(kind,roleCode){return window.ForestWatchPointFilters?.matches(kind,roleCode)??true;}
+  function renderReferences(){
+    refLayer.clearLayers();
+    for(const e of existing){
+      if(!pointMatches('sensor','EX'))continue;
+      const icon=L.divIcon({className:'plan-leaflet-icon',html:'<span class="map-sensor existing" data-site-id="'+e.id+'" data-lat="'+e.lat+'" data-lon="'+e.lon+'" data-role-code="EX" role="img" aria-label="'+e.id+' เซนเซอร์เดิม">'+e.id.replace('EX-','E')+'</span>',iconSize:[38,38],iconAnchor:[19,19]});
+      L.marker([e.lat,e.lon],{icon}).addTo(refLayer).bindTooltip(e.id+' · Sensor เดิม').on('click',()=>showReference(e));
+    }
+    for(const h of hotspots){
+      if(!pointMatches('hotspot'))continue;
+      const icon=L.divIcon({className:'plan-leaflet-icon',html:'<span class="map-hotspot" data-site-id="'+h.id+'" data-lat="'+h.lat+'" data-lon="'+h.lon+'" data-role-code="hotspot" role="img" aria-label="'+h.id+' จุดไฟย้อนหลัง">●</span>',iconSize:[28,28],iconAnchor:[14,14]});
+      L.marker([h.lat,h.lon],{icon}).addTo(refLayer).bindTooltip(h.id+' · historical hotspot · FRP '+h.frp).on('click',()=>showHotspot(h));
+    }
   }
 
   const detail={
@@ -342,7 +409,7 @@
 
   function setScoreFields(p){
     detail.total.textContent=Math.round(p.totalScore||0)+'/100';
-    detail.confidence.textContent=demLoaded?'DEM + wind + risk + geometry':'fallback · DEM unavailable';
+    detail.confidence.textContent=demLoaded?(demStatus==='cached'?'DEM ที่บันทึกไว้ + wind + risk + geometry':'DEM + wind + risk + geometry'):'fallback · DEM unavailable';
     detail.sTerrain.textContent=Math.round(p.terrainScore||0);
     detail.sSmoke.textContent=Math.round(p.smokeScore||0);
     detail.sRisk.textContent=Math.round(p.riskScore||0);
@@ -394,15 +461,17 @@
   function renderCandidates(){
     candidateLayer.clearLayers();markerMap.clear();
     for(const p of selected){
+      if(!pointMatches('sensor',p.roleCode))continue;
       const icon=L.divIcon({
         className:'plan-leaflet-icon',
-        html:'<span class="map-sensor proposed role-'+p.roleCode+'">'+p.id.replace('N0','N')+'</span>',
+        html:'<span class="map-sensor proposed role-'+p.roleCode+'" data-site-id="'+p.id+'" data-lat="'+p.lat+'" data-lon="'+p.lon+'" data-role-code="'+p.roleCode+'" role="img" aria-label="'+p.id+' '+p.role+'">'+p.id.replace('N0','N')+'</span>',
         iconSize:[38,38],iconAnchor:[19,19]
       });
       const m=L.marker([p.lat,p.lon],{icon}).addTo(candidateLayer);
       m.bindTooltip(p.id+' · '+p.role+' · '+Math.round(p.totalScore)+'/100',{direction:'top',offset:[0,-13]});
       m.on('click',()=>showCandidate(p));markerMap.set(p.id,m);
     }
+    syncPlanningOverlays();
   }
   function renderSource(){
     sourceLayer.clearLayers();
@@ -458,8 +527,10 @@
     document.getElementById('plan-candidate-count').textContent=grid.length;
     document.getElementById('plan-selected-count').textContent=selected.length;
     document.getElementById('plan-core-count').textContent=core;
-    document.getElementById('plan-dem-metric').textContent=demLoaded?'GLO-90':'Fallback';
-    document.getElementById('plan-dem-note').textContent=demLoaded?'Copernicus DEM 2021 · 90 m via Open-Meteo':'ใช้ wind/risk/geometry จนกว่า DEM จะกลับมา';
+    document.getElementById('plan-dem-metric').textContent=demLoaded?(demStatus==='cached'?'GLO-90 (cache)':'GLO-90'):'Fallback';
+    const cachedAt=window.ForestWatchNetworkV4?.demCachedAt;
+    const cacheLabel=demStatus==='cached'&&cachedAt&&Number.isFinite(Date.parse(cachedAt))?' · บันทึก '+new Intl.DateTimeFormat('th-TH',{timeZone:'Asia/Bangkok',dateStyle:'short',timeStyle:'short'}).format(new Date(cachedAt)):'';
+    document.getElementById('plan-dem-note').textContent=demLoaded?'Copernicus DEM 2021 · 90 m via Open-Meteo'+cacheLabel:'ใช้ wind/risk/geometry จนกว่า DEM จะกลับมา';
   }
 
   function focusZone(id){
@@ -473,34 +544,32 @@
     document.getElementById('plan-focus').onclick=()=>focusZone(select.value);
     document.getElementById('plan-fit').onclick=()=>map.fitBounds([[minLat,minLon],[maxLat,maxLon]],{padding:[20,20]});
     select.onchange=()=>{if(select.value!=='ALL')focusZone(select.value);};
-    document.getElementById('plan-heat').onchange=e=>e.target.checked?heatLayer.addTo(map):map.removeLayer(heatLayer);
-    document.getElementById('plan-blind').onchange=e=>e.target.checked?blindLayer.addTo(map):map.removeLayer(blindLayer);
-    document.getElementById('plan-source').onchange=e=>e.target.checked?sourceLayer.addTo(map):map.removeLayer(sourceLayer);
+    ['plan-heat','plan-blind','plan-source'].forEach(id=>document.getElementById(id).onchange=syncPlanningOverlays);
   }
 
-  async function bootstrap(){
-    setStatus('ใช้ fallback จาก wind/risk/geometry ระหว่างโหลด DEM · แสดง 21 จุดให้ตรวจสอบได้ทันที','loading');
-    renderHeat();renderBlind();renderCandidates();renderSource();renderTable();renderZoneCards();renderReplay();updateMetrics();bindControls();
-    if(selected[0])showCandidate(selected[0]);
-    focusZone('ALL');
-    const terrainGrid=createGrid(),controller=new AbortController();
-    let timeout;
-    try{
-      await Promise.race([
-        enrichGrid(terrainGrid,controller.signal),
-        new Promise((_,reject)=>{timeout=setTimeout(()=>{controller.abort();reject(new Error('Elevation deadline exceeded'));},14000);})
-      ]);
-      grid=terrainGrid;demLoaded=true;demStatus='ready';
-      setStatus('DEM พร้อม · คำนวณ slope/aspect proxy และเลือก network ตาม terrain + risk + wind + geometry','ready');
-    }catch(err){
-      demLoaded=false;demStatus='unavailable';
-      setStatus('DEM ไม่พร้อมภายในเวลาที่กำหนด · ใช้ fallback จาก wind + historical risk + network geometry','error');
-    }finally{clearTimeout(timeout);controller.abort();}
-    addScores(grid,demLoaded);
-    selected=selectNetwork(grid);
-    renderHeat();renderBlind();renderCandidates();renderSource();renderTable();renderZoneCards();renderReplay();updateMetrics();
-    if(selected[0]) showCandidate(selected[0]);
-    publishNetworkData();
+  function syncPlanningOverlays(){
+    const showPlanning=(window.ForestWatchPointFilters?.get().mode||'all')==='all';
+    [['plan-heat',heatLayer],['plan-blind',blindLayer],['plan-source',sourceLayer]].forEach(([id,layer])=>{
+      const input=document.getElementById(id);input.disabled=!showPlanning;
+      if(showPlanning&&input.checked)layer.addTo(map);else map.removeLayer(layer);
+    });
+    const el=document.getElementById('network-map');
+    const sensorCount=selected.filter(p=>pointMatches('sensor',p.roleCode)).length+(pointMatches('sensor','EX')?existing.length:0),hotspotCount=pointMatches('hotspot')?hotspots.length:0;
+    el.dataset.visibleSensorCount=String(sensorCount);el.dataset.visibleHotspotCount=String(hotspotCount);
+    el.dataset.pointMode=window.ForestWatchPointFilters?.get().mode||'all';
+    const count=document.querySelector('[data-point-count="2d"]');
+    if(count)count.textContent='แสดง '+(sensorCount+hotspotCount)+' จุด · เซนเซอร์ '+sensorCount+' · จุดไฟ '+hotspotCount;
+  }
+  renderReferences();syncPlanningOverlays();
+  window.ForestWatchPointFilters?.subscribe(()=>{renderCandidates();renderReferences();syncPlanningOverlays();});
+
+  function bootstrap(){
+    setStatus(demLoaded?'ใช้ network ล่าสุดจาก DEM ที่บันทึกไว้ · กำลังตรวจอัปเดต':'ใช้ fallback จาก wind/risk/geometry ระหว่างโหลด DEM · แสดง 21 จุดให้ตรวจสอบได้ทันที','loading');
+    renderUpdatedPlan=()=>{
+      renderHeat();renderBlind();renderCandidates();renderSource();renderTable();renderZoneCards();renderReplay();updateMetrics();
+      if(selected[0])showCandidate(selected[0]);
+    };
+    renderUpdatedPlan();bindControls();focusZone('ALL');
   }
   bootstrap();
 })();
