@@ -1,0 +1,13 @@
+/* wildfire v.1 uses the original layout with the operational map first. */
+.operational-3d{margin-top:0}
+.op-coordinate-form{margin:0 0 12px}
+.op-coordinate-form fieldset{margin:0;padding:0;border:0;min-width:0}
+.op-coordinate-form legend{padding:0;margin-bottom:7px;font-size:11px;color:#3d5b4d}
+.op-coordinate-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.op-coordinate-grid label{display:flex;flex-direction:column;gap:5px;font-size:11px;color:#64736b}
+.op-coordinate-grid input{width:100%;min-width:0;min-height:40px;padding:8px;font-size:14px;font-variant-numeric:tabular-nums}
+.op-coordinate-grid input[aria-invalid="true"]{border-color:#b53d32}
+.op-coordinate-form small{display:block;margin:6px 0;color:#64736b;font-size:10px;line-height:1.45}
+.op-coordinate-form button{width:100%;min-height:38px;font-size:12px}
+.op-coordinate-error{margin:6px 0;color:#a83227;font-size:12px;line-height:1.45}
+@media(min-width:851px){.op-map-card{align-self:start}.op-command{max-height:680px;overflow-y:auto}}

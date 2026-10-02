@@ -190,3 +190,11 @@ Suppression mode เปิด slope screening, road/track/path, mapped support p
 **ข้อจำกัดสำคัญ:** OSM เป็น volunteered geographic data; road/path/support/barrier อาจไม่ครบหรือไม่เป็นปัจจุบัน. 3D terrain และ slope screen เป็น planning support เท่านั้น. Route ไม่ได้รวม live fire perimeter, smoke visibility, falling trees, bridge load, road closure, recent landslide, field command, crew capability หรือ tactical safety. ต้อง field-verify และใช้ SOP/incident command ก่อนการใช้งานปฏิบัติการจริง.
 
 Data attribution: OpenStreetMap contributors, MapLibre GL JS, maplibre-contour, AWS elevation tiles / Terrarium DEM, Esri World Imagery, OpenTopoMap, Copernicus DEM / Open-Meteo Elevation, ESA WorldCover 2021.
+
+
+## wildfire versions
+
+- `wildfire v.0`: original dashboard at `/fire/`; only its displayed name changes.
+- `wildfire v.1`: customer presentation at `/fire/wildfire-v1/`. Operational 3D appears first, followed by the complete original DEM-driven 2D Network Plan. The first playback map and Budget Optimizer/BOQ section are excluded. No financial JavaScript or quotation data loads in v.1.
+- v.1 includes latitude/longitude inputs for the fire point and travel starting point. Local spatial reference initializes 3D independently of elevation, Leaflet and OSM enrichment. DEM and OSM requests are bounded; missing optional contour/terrain data keeps the map usable, and devices without WebGL receive an explicitly identified 2D fallback.
+- The customer page uses a stable, nonfinancial 34-site/5-gateway reference generated from v.0’s default documented neutral-data fallback; the reference provenance is shown. The full 21-site Network Plan continues to use its original terrain/risk/wind/geometry selection.
