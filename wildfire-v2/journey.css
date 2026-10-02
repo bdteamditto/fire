@@ -1,0 +1,25 @@
+/* V2 travel stages: driveable OSM route, mapped walking route, and explicit off-road connectors. */
+#op-journey{margin:14px 0;padding:12px;border:1px solid #d9e4dd;border-radius:8px;background:#f5f8f6}
+#op-journey[hidden]{display:none}
+#op-journey h4{margin:0 0 9px;font-size:14px;color:#254e3e}
+.op-journey-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.op-journey-summary p{margin:0;padding:8px;background:#fff;border:1px solid #e0e7e2;border-radius:6px}
+.op-journey-summary span{display:block;font-size:11px;color:#64736b}
+.op-journey-summary strong{display:block;font-size:13px;color:#254e3e;font-variant-numeric:tabular-nums}
+.op-journey-steps{margin:12px 0 0;padding-left:22px;color:#315844}
+.op-journey-steps li{padding:0 0 10px 3px;font-size:12px}
+.op-journey-steps li:last-child{padding-bottom:0}
+.op-journey-steps strong,.op-journey-steps small{display:block}
+.op-journey-steps small{font-size:11px;color:#65726b;line-height:1.5}
+.op-journey-focus{width:100%;margin-top:5px;padding:6px 8px;font-size:11px;line-height:1.45;min-height:38px;text-align:left;overflow-wrap:anywhere;color:#315844}
+.op-journey-marker{display:flex;align-items:center;justify-content:center;gap:1px;width:42px;height:42px;min-height:42px;padding:6px;border:2px solid #fff;border-radius:11px;background:#17613f;color:#fff;box-shadow:0 2px 10px #122f2b66;cursor:pointer}
+.op-journey-marker svg{display:block;width:29px;height:29px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.op-journey-marker--person{background:#7651a1}
+.op-journey-marker--handoff{width:68px;background:#565145}
+.op-journey-marker--handoff svg{width:27px}
+.op-journey-marker--target{background:#b54532;border-radius:50%}
+.op-journey-marker:hover{background:#245b4b;color:#fff}
+.op-journey-marker:focus-visible{outline:3px solid #f7ca5d;outline-offset:3px}
+.op-journey-leaflet{border:0;background:transparent}
+.op-key.walk{border-color:#c291f1;border-top-style:dashed}
+@media(max-width:550px){.op-journey-marker{width:40px;height:40px;min-height:40px}.op-journey-marker--handoff{width:64px}.op-journey-focus{font-size:12px}}
