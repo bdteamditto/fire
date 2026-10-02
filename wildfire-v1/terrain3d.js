@@ -213,7 +213,7 @@
   function sourceSet(id,data){
     const s=app.map?.getSource(id);if(s)s.setData(data);
     document.getElementById('operational-3d-map')?.setAttribute('data-'+id+'-feature-count',String(data.features?.length||0));
-    if(['sensors','hotspots'].includes(id))document.getElementById('operational-3d-map')?.setAttribute('data-'+id+'-points',JSON.stringify(data.features.map(f=>({id:f.properties.id,lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0],roleCode:f.properties.roleCode}))));
+    if(['sensors','hotspots','route-points'].includes(id))document.getElementById('operational-3d-map')?.setAttribute('data-'+id+'-points',JSON.stringify(data.features.map(f=>({id:f.properties.id,lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0],roleCode:f.properties.roleCode,kind:f.properties.kind}))));
     if(app.flatMap){
       const old=app.flatLayers.get(id);if(old)app.flatMap.removeLayer(old);
       if(['roads','support','barriers','sensors','gateways','hotspots','route','egress','offroad','route-points'].includes(id)){
@@ -261,6 +261,7 @@
     if(app.manualStart)points.push({coord:app.manualStart,properties:{kind:'start'}});
     if(target)points.push({coord:[target.lat,target.lon],properties:{kind:'target'}});
     sourceSet('route-points',pointFC(points));
+    syncLayerToggles();
   }
   function setCoordinatePoint(kind,coord){
     app.pickMode=null;clearRoute();writeCoordinates(kind,coord);
@@ -272,6 +273,23 @@
     }
     showChosenPoints();
     setStatus(kind==='start'?'กำหนดพิกัดจุดเริ่มแล้ว · กดคำนวณเส้นทาง':'กำหนดพิกัดจุดไฟแล้ว · กดคำนวณเส้นทาง','ready');
+  }
+  function randomizeFireTarget(){
+    const bounds=app.state?.data?.bounds;
+    if(!bounds||!['minLat','maxLat','minLon','maxLon'].every(k=>Number.isFinite(bounds[k]))||
+       bounds.minLat>=bounds.maxLat||bounds.minLon>=bounds.maxLon||bounds.minLat<-90||bounds.maxLat>90||bounds.minLon<-180||bounds.maxLon>180){
+      setStatus('ยังไม่มีขอบเขตพื้นที่วางแผนสำหรับสุ่มจุดไฟ','error');return null;
+    }
+    const latSpan=bounds.maxLat-bounds.minLat,lonSpan=bounds.maxLon-bounds.minLon;
+    const latitude=Math.random(),longitude=Math.random();
+    const sampleLat=fraction=>Number((bounds.minLat+latSpan*(.05+.90*fraction)).toFixed(6));
+    const coord=[sampleLat(latitude),Number((bounds.minLon+lonSpan*(.05+.90*longitude)).toFixed(6))];
+    if(app.customTarget?.[0]===coord[0]&&app.customTarget?.[1]===coord[1])coord[0]=sampleLat((latitude+.5)%1);
+    setCoordinatePoint('target',coord);
+    app.map?.easeTo?.({center:[coord[1],coord[0]],duration:550});
+    app.flatMap?.panTo?.(coord);
+    setStatus('สุ่มพิกัดจุดไฟสำหรับเดโมแล้ว · กดคำนวณเส้นทาง','ready');
+    return coord;
   }
   function currentTarget(){
     const sel=document.getElementById('op-target')?.value||'H-01';
@@ -466,10 +484,12 @@
     visible('sensors',assets);visible('gateways',assets&&matchesPoint('gateway'));visible('hotspots',matchesPoint('hotspot'));
     app.existingMarkers.forEach(marker=>marker.getElement().style.display=assets&&matchesPoint('sensor','EX')?'':'none');
     const route=document.getElementById('op-route-layer')?.checked!==false;
-    visible('route-casing',route);visible('route',route);visible('egress-casing',route);visible('egress',route);visible('offroad',route);visible('route-points',route&&matchesPoint('route-point'));
+    const chosenPoints=route&&(matchesPoint('route-point')||document.getElementById('op-target')?.value==='CUSTOM');
+    visible('route-casing',route);visible('route',route);visible('egress-casing',route);visible('egress',route);visible('offroad',route);visible('route-points',chosenPoints);
+    document.getElementById('operational-3d-map')?.setAttribute('data-route-points-visible',String(chosenPoints));
     if(app.flatMap){
       for(const [id,layer] of app.flatLayers){
-        const on=id==='sensors'?assets:id==='gateways'?assets&&matchesPoint('gateway'):id==='hotspots'?matchesPoint('hotspot'):['support','barriers'].includes(id)?sup:id==='route-points'?route&&matchesPoint('route-point'):['route','egress','offroad'].includes(id)?route:true;
+        const on=id==='sensors'?assets:id==='gateways'?assets&&matchesPoint('gateway'):id==='hotspots'?matchesPoint('hotspot'):['support','barriers'].includes(id)?sup:id==='route-points'?chosenPoints:['route','egress','offroad'].includes(id)?route:true;
         if(on&&!app.flatMap.hasLayer(layer))layer.addTo(app.flatMap);else if(!on&&app.flatMap.hasLayer(layer))app.flatMap.removeLayer(layer);
       }
     }
@@ -593,6 +613,7 @@
     document.getElementById('op-pick-start')?.addEventListener('click',()=>{app.pickMode='start';setStatus('คลิกบนแผนที่เพื่อกำหนดจุดเริ่มต้นการเดินทาง','loading');});
     document.getElementById('op-auto-start')?.addEventListener('click',()=>{app.manualStart=null;app.pickMode=null;writeCoordinates('start',null);clearRoute();showChosenPoints();setText('op-start-mode','Auto · จุดเริ่มต้นการเดินทางจากถนนหลัก');setStatus('กลับไปใช้ Auto staging · กดคำนวณเส้นทาง','ready');});
     document.getElementById('op-pick-target')?.addEventListener('click',()=>{app.pickMode='target';setStatus('คลิกบนแผนที่เพื่อกำหนดจุดเหตุ / fire target','loading');});
+    document.getElementById('op-auto-target')?.addEventListener('click',randomizeFireTarget);
     document.getElementById('op-target')?.addEventListener('change',()=>{
       app.pickMode=null;clearRoute();const target=currentTarget();writeCoordinates('target',target?[target.lat,target.lon]:null);showChosenPoints();
       setStatus(target?'เลือกเป้าหมายแล้ว · กดคำนวณเส้นทาง':'กรอกพิกัดจุดไฟแล้วกดใช้พิกัด หรือกดกำหนดจุดไฟบนแผนที่','ready');

@@ -25,7 +25,7 @@ class Element {
   set innerHTML(value) { this._html = value; if (value === '') this.children = []; }
 }
 
-function fixture({ cachedTerrain = null, leaflet = true, elevationReady = false } = {}) {
+function fixture({ cachedTerrain = null, leaflet = true, elevationReady = false, randomValues = [] } = {}) {
   const elements = new Map([...read('wildfire-v1/index.html').matchAll(/\bid="([^"]+)"/g)]
     .map(match => [match[1], new Element()]));
   const buttons = ['all', 'sensors', 'hotspots', 'all', 'sensors', 'hotspots'].map(mode => {
@@ -45,7 +45,8 @@ function fixture({ cachedTerrain = null, leaflet = true, elevationReady = false 
   let map;
   const layer = (options = {}) => ({
     options, addTo(target) { target.addLayer(this); return this; }, on() { return this; },
-    bindTooltip(text) { this.tooltip = text; return this; }, getLatLng() { return this.coord; }, openTooltip() {}
+    bindTooltip(text) { this.tooltip = text; return this; }, bindPopup() { return this; },
+    getLatLng() { return this.coord; }, openTooltip() {}
   });
   const L = {
     map() {
@@ -64,7 +65,8 @@ function fixture({ cachedTerrain = null, leaflet = true, elevationReady = false 
     divIcon: options => ({ options }),
     marker: (coord, options) => Object.assign(layer(options), { coord }),
     circleMarker: (coord, options) => Object.assign(layer(options), { coord }),
-    polygon: () => layer(), polyline: () => layer(), latLngBounds: () => ({ pad() { return this; } })
+    polygon: () => layer(), polyline: () => layer(), latLngBounds: () => ({ pad() { return this; } }),
+    geoJSON: (data, options) => Object.assign(layer(options), { data })
   };
   const cache = new Map();
   const store = {
@@ -85,8 +87,10 @@ function fixture({ cachedTerrain = null, leaflet = true, elevationReady = false 
     }
     return { ok: false, status: 503 };
   };
+  const mockMath = Object.create(Math);
+  mockMath.random = () => randomValues.length ? randomValues.shift() : .5;
   const context = vm.createContext({ window, document, L, localStorage: store, CustomEvent, AbortController,
-    fetch, setTimeout, clearTimeout, Date, Intl, console });
+    fetch, setTimeout, clearTimeout, Date, Intl, console, Math: mockMath });
   vm.runInContext(read('wildfire-v1/point-filters.js'), context);
   const source = read('wildfire-v1/network-plan.js');
   const anchor = 'const cachedTerrain=readTerrainCache();';
@@ -104,7 +108,7 @@ function terrainRenderer(f) {
   const testEnd = `
     bindControls();
     window.ForestWatchPointFilters?.subscribe(()=>{if(app.state)syncLayerToggles();});
-    window.__terrainTest={app,nodeFC,hotspotFC,llText,currentTarget,updateOperationalData};
+    window.__terrainTest={app,nodeFC,hotspotFC,llText,currentTarget,updateOperationalData,setCoordinatePoint,randomizeFireTarget,syncLayerToggles};
   })();`;
   vm.runInContext(source.slice(0, anchor) + testEnd, f.context);
   return f.window.__terrainTest;
@@ -231,7 +235,100 @@ async function main() {
   live.window.ForestWatchPointFilters.set('all');
   assert.equal(live.groups[3].children.length, 21);
   for (const overlay of live.groups.slice(0, 3)) assert.equal(live.map.hasLayer(overlay), true);
-  console.log('PASS: exact shared N21/EX/H coordinates and metadata; every point filter; route target identity/invalidation; role-repair quotas; cached DEM failure; no-Leaflet bootstrap; hidden-overlay DEM refresh');
+
+  // Auto fire targets work from published planning bounds even while OSM/DEM are offline.
+  const auto = fixture({ randomValues: [0, 1 - Number.EPSILON, .25, .75, .25, .75] }), autoT = terrainRenderer(auto);
+  const autoPayload = auto.window.ForestWatchPresentationState;
+  autoT.updateOperationalData(autoPayload);
+  assert.equal(autoPayload.osmOK, false); assert.equal(autoPayload.data.selected.length, 21);
+  const bounds = autoPayload.data.bounds, sourceData = new Map(), visibility = new Map(), cameraMoves = [];
+  autoT.app.map = {
+    getSource: id => ({ setData: data => sourceData.set(id, plain(data)) }),
+    getLayer: () => ({}), setLayoutProperty: (id, key, value) => visibility.set(id, value),
+    flyTo() {}, easeTo: options => cameraMoves.push(options), fitBounds() {}, getZoom: () => 14
+  };
+  const manualStart = [bounds.minLat + .001, bounds.minLon + .001];
+  autoT.setCoordinatePoint('start', manualStart);
+  autoT.setCoordinatePoint('target', [(bounds.minLat + bounds.maxLat) / 2, (bounds.minLon + bounds.maxLon) / 2]);
+  const beforeAuto = JSON.stringify(autoPayload.data), startFields = ['lat', 'lon'].map(axis => auto.elements.get('op-start-' + axis).value);
+  autoT.app.currentRoute = { target: autoT.currentTarget(), dummy: true }; autoT.app.pickMode = 'target';
+  const oldRevision = autoT.app.routeRevision;
+  const first = autoT.randomizeFireTarget();
+  function assertFireTarget(coord) {
+    assert.equal(coord.length, 2); assert.ok(coord.every(Number.isFinite));
+    assert.ok(coord[0] >= bounds.minLat && coord[0] <= bounds.maxLat);
+    assert.ok(coord[1] >= bounds.minLon && coord[1] <= bounds.maxLon);
+    const insetLat = (bounds.maxLat - bounds.minLat) * .05, insetLon = (bounds.maxLon - bounds.minLon) * .05;
+    assert.ok(coord[0] >= bounds.minLat + insetLat - .0000005 && coord[0] <= bounds.maxLat - insetLat + .0000005);
+    assert.ok(coord[1] >= bounds.minLon + insetLon - .0000005 && coord[1] <= bounds.maxLon - insetLon + .0000005);
+    coord.forEach(value => assert.equal(value, Number(value.toFixed(6))));
+    assert.deepEqual(plain(autoT.app.customTarget), plain(coord));
+    assert.equal(auto.elements.get('op-target').value, 'CUSTOM');
+    assert.deepEqual(plain(autoT.currentTarget()), { id: 'Custom fire point', lat: coord[0], lon: coord[1], type: 'fire' });
+    ['lat', 'lon'].forEach((axis, index) => assert.equal(Number(auto.elements.get('op-target-' + axis).value), Number(coord[index].toFixed(6))));
+    assert.deepEqual(plain(autoT.app.manualStart), manualStart); assert.equal(autoT.app.pickMode, null);
+    assert.deepEqual(['lat', 'lon'].map(axis => auto.elements.get('op-start-' + axis).value), startFields);
+    assert.equal(autoT.app.currentRoute, null); assert.equal(auto.elements.get('op-route-distance').textContent, '—');
+    for (const id of ['route', 'egress', 'offroad']) assert.equal(sourceData.get(id).features.length, 0);
+    const chosen = sourceData.get('route-points').features;
+    assert.equal(chosen.length, 2);
+    assert.deepEqual(chosen.find(p => p.properties.kind === 'start').geometry.coordinates, [manualStart[1], manualStart[0]]);
+    assert.deepEqual(chosen.find(p => p.properties.kind === 'target').geometry.coordinates, [coord[1], coord[0]]);
+    assert.equal(JSON.stringify(autoPayload.data), beforeAuto);
+  }
+  assertFireTarget(first); assert.ok(autoT.app.routeRevision > oldRevision);
+  assert.deepEqual(plain(cameraMoves[0].center), [first[1], first[0]]); assert.equal(cameraMoves[0].zoom, undefined);
+  autoT.app.currentRoute = { dummy: true };
+  assert.equal(typeof auto.elements.get('op-auto-target')?.listeners.click, 'function');
+  auto.elements.get('op-auto-target').listeners.click();
+  const second = autoT.app.customTarget;
+  assertFireTarget(second); assert.notDeepEqual(plain(second), plain(first));
+  // Repeated RNG values still produce a new coordinate after rounding.
+  const third = autoT.randomizeFireTarget();
+  assertFireTarget(third); assert.notDeepEqual(plain(third), plain(second));
+  for (const mode of ['sensors', 'hotspots', 'all']) {
+    auto.window.ForestWatchPointFilters.set(mode, mode === 'sensors' ? 'RW' : 'all');
+    assert.equal(auto.window.ForestWatchPointFilters.get().mode, mode);
+    assert.equal(visibility.get('route-points'), 'visible', 'Explicit custom target stays visible in each point filter');
+    assert.deepEqual(plain(autoT.app.customTarget), plain(third));
+  }
+  auto.elements.get('op-route-layer').checked = false; autoT.syncLayerToggles();
+  assert.equal(visibility.get('route-points'), 'none');
+  auto.elements.get('op-route-layer').checked = true; autoT.syncLayerToggles();
+  assert.equal(visibility.get('route-points'), 'visible');
+  // Leaflet fallback uses the same custom-point rule, and retains the route-layer switch.
+  autoT.app.flatMap = {
+    layers: new Set(), addLayer(item) { this.layers.add(item); return this; },
+    removeLayer(item) { this.layers.delete(item); return this; }, hasLayer(item) { return this.layers.has(item); }
+  };
+  autoT.setCoordinatePoint('target', third);
+  for (const mode of ['sensors', 'hotspots', 'all']) {
+    auto.window.ForestWatchPointFilters.set(mode, mode === 'sensors' ? 'RW' : 'all');
+    assert.equal(autoT.app.flatMap.hasLayer(autoT.app.flatLayers.get('route-points')), true);
+    assert.equal(auto.window.ForestWatchPointFilters.get().mode, mode);
+  }
+  auto.elements.get('op-route-layer').checked = false; autoT.syncLayerToggles();
+  assert.equal(autoT.app.flatMap.hasLayer(autoT.app.flatLayers.get('route-points')), false);
+  auto.elements.get('op-route-layer').checked = true;
+  auto.window.ForestWatchPointFilters.set('sensors', 'RW'); auto.elements.get('op-target').value = 'H-01';
+  autoT.syncLayerToggles(); assert.equal(visibility.get('route-points'), 'none');
+  assert.equal(autoT.app.flatMap.hasLayer(autoT.app.flatLayers.get('route-points')), false);
+  auto.elements.get('op-target').value = 'CUSTOM'; autoT.syncLayerToggles();
+  assert.equal(visibility.get('route-points'), 'visible');
+  assert.equal(autoT.app.flatMap.hasLayer(autoT.app.flatLayers.get('route-points')), true);
+  const validState = autoT.app.state, validRevision = autoT.app.routeRevision;
+  autoT.app.state = { ...validState, data: { ...validState.data, bounds: { ...bounds, maxLat: bounds.minLat } } };
+  assert.equal(autoT.randomizeFireTarget(), null);
+  assert.equal(auto.elements.get('op-status').dataset.state, 'error');
+  assert.equal(autoT.app.routeRevision, validRevision); assert.deepEqual(plain(autoT.app.customTarget), plain(third));
+  autoT.app.state = null; assert.equal(autoT.randomizeFireTarget(), null);
+  assert.equal(autoT.app.routeRevision, validRevision); assert.deepEqual(plain(autoT.app.manualStart), manualStart);
+  autoT.app.state = validState;
+  await tick();
+  assert.equal(auto.window.ForestWatchNetworkV4.demStatus, 'unavailable');
+  assert.equal(auto.window.ForestWatchNetworkV4.selected.length, 21);
+  assert.deepEqual(plain(autoT.app.customTarget), plain(third));
+  console.log('PASS: exact shared N21/EX/H coordinates and metadata; every point filter; route target identity/invalidation; role-repair quotas; cached DEM failure; no-Leaflet bootstrap; hidden-overlay DEM refresh; bounded repeated Auto fire coordinates and preserved manual start offline');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });
