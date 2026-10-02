@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="แผนที่ภูมิประเทศสามมิติ เส้นทางเข้าถึง และแผนเครือข่ายเซนเซอร์สำหรับเฝ้าระวังไฟป่า · ข้อมูลสำหรับวางแผน ไม่ใช่ข้อมูลเตือนภัยจริง"><title>wildfire v.1 | ศูนย์เฝ้าระวังไฟป่า</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b493b'/%3E%3Cpath d='M16 5L5 23h22Z' fill='%238edf8f'/%3E%3Cpath d='M16 18v10' stroke='white' stroke-width='3'/%3E%3C/svg%3E"><link rel="stylesheet" href="../style.css?v=wildfire-v1"><link rel="stylesheet" href="../vendor/leaflet/leaflet.css" crossorigin=""><link rel="stylesheet" href="../vendor/maplibre/maplibre-gl.css?v=5.6.2"><link rel="stylesheet" href="presentation.css?v=wildfire-v1"></head>
+<body><header class="topbar"><div class="brand"><span class="brandmark" aria-hidden="true">▲</span><div><b>wildfire v.1</b><span>ศูนย์เฝ้าระวังไฟป่า · พื้นที่สาธิต 2 กม.</span></div></div><div class="headright"><span class="demotag">DEMO · ข้อมูลจำลอง</span></div></header>
+<main>
+<section class="operational-3d" id="operational-3d">
+  <div class="panelhead op-head">
+    <div>
+      <p class="eyebrow">OPERATIONAL TERRAIN · VERSION 6</p>
+      <h2>3D Terrain + Contour + Access & Suppression Route</h2>
+      <span class="muted">มองภูมิประเทศจริงร่วมกับถนน track/path จุดสนับสนุน และเส้นทางเข้า–ออกไปยัง hotspot หรือจุดที่กำหนดเอง</span>
+    </div>
+    <div class="op-mode-buttons" role="group" aria-label="Operational map mode">
+      <button type="button" data-op-mode="terrain" class="active">Terrain</button>
+      <button type="button" data-op-mode="access">Access</button>
+      <button type="button" data-op-mode="suppression">Suppression</button>
+    </div>
+  </div>
+
+  <div class="op-toolbar">
+    <div class="op-basemap">
+      <span>Basemap</span>
+      <button type="button" data-basemap="satellite" class="active">Satellite 3D</button>
+      <button type="button" data-basemap="topo">Topo 3D</button>
+    </div>
+    <label><input id="op-contours" type="checkbox" checked> Contour</label>
+    <label><input id="op-hillshade" type="checkbox" checked> Hillshade</label>
+    <label><input id="op-slope" type="checkbox"> Slope screen</label>
+    <label><input id="op-roads" type="checkbox" checked> Roads</label>
+    <label><input id="op-tracks" type="checkbox" checked> Track / Path</label>
+    <label><input id="op-support" type="checkbox"> Support / Barrier</label>
+    <label><input id="op-assets" type="checkbox" checked> Sensor / Gateway</label>
+    <label><input id="op-route-layer" type="checkbox" checked> Access route</label>
+    <label class="op-exaggeration">Terrain <input id="op-exaggeration" type="range" min="1" max="2.2" step="0.1" value="1.5"><b id="op-exag-value">1.5×</b></label>
+  </div>
+
+  <p id="v1-data-status" class="op-status" role="status">กำลังเตรียมข้อมูลแผนที่…</p>
+<p id="v1-site-provenance" class="plan-scope-note"></p>
+<p id="op-status" class="op-status" data-state="loading" role="status" aria-live="polite">กำลังเตรียม 3D terrain และ access network…</p>
+
+  <div class="op-layout">
+    <div class="op-map-card">
+      <div id="operational-3d-map" role="img" aria-label="แผนที่ภูมิประเทศสามมิติ contour ถนน เส้นทางเข้าถึง และเส้นทางสำหรับวางแผนเข้าพื้นที่ไฟป่า"></div>
+      <div class="op-map-key">
+        <span><i class="op-key road"></i>ถนนหลัก/ถนนรถ</span>
+        <span><i class="op-key track"></i>track / forest road</span>
+        <span><i class="op-key path"></i>path / foot access</span>
+        <span><i class="op-key route"></i>access เข้า</span><span><i class="op-key egress"></i>egress ออก</span>
+        <span><i class="op-key offroad"></i>ช่วงเข้าพื้นที่นอกทาง</span>
+        <span><i class="op-key blocked"></i>access private/no ที่พบใน OSM</span>
+      </div>
+    </div>
+
+    <aside class="op-command">
+      <p class="eyebrow">ACCESS PLANNER</p>
+      <h3>วางแผนทางเข้า–ออก</h3>
+      <label>เป้าหมาย
+        <select id="op-target"></select>
+      </label>
+      <div class="op-inline-actions">
+        <button id="op-pick-target" type="button">กำหนดจุดไฟบนแผนที่</button>
+      </div>
+      <form id="op-target-coordinates" class="op-coordinate-form" novalidate>
+        <fieldset>
+          <legend>หรือกรอกพิกัดจุดไฟ</legend>
+          <div class="op-coordinate-grid">
+            <label for="op-target-lat">Latitude (ละติจูด)<input id="op-target-lat" name="latitude" type="number" inputmode="decimal" step="any" min="-90" max="90" placeholder="19.402722" required aria-describedby="op-target-coordinate-error"></label>
+            <label for="op-target-lon">Longitude (ลองจิจูด)<input id="op-target-lon" name="longitude" type="number" inputmode="decimal" step="any" min="-180" max="180" placeholder="101.091000" required aria-describedby="op-target-coordinate-error"></label>
+          </div>
+          <small>องศาทศนิยม (WGS84) · กดใช้พิกัดเพื่อกำหนดจุดไฟ</small>
+          <p id="op-target-coordinate-error" class="op-coordinate-error" role="alert" hidden></p>
+          <button type="submit">ใช้พิกัดจุดไฟ</button>
+        </fieldset>
+      </form>
+      <label>รูปแบบการเดินทาง
+        <select id="op-profile">
+          <option value="vehicle">รถทั่วไป</option>
+          <option value="4x4" selected>4x4 / forest track</option>
+          <option value="foot">เดินเท้า</option>
+        </select>
+      </label>
+      <div class="op-start-box">
+        <span>จุดเริ่มต้นการเดินทาง</span>
+        <b id="op-start-mode">Auto staging · nearest connected major road</b>
+        <form id="op-start-coordinates" class="op-coordinate-form" novalidate>
+          <fieldset>
+            <legend>หรือกรอกพิกัดจุดเริ่มต้นการเดินทาง</legend>
+            <div class="op-coordinate-grid">
+              <label for="op-start-lat">Latitude (ละติจูด)<input id="op-start-lat" name="latitude" type="number" inputmode="decimal" step="any" min="-90" max="90" placeholder="19.402722" required aria-describedby="op-start-coordinate-error"></label>
+              <label for="op-start-lon">Longitude (ลองจิจูด)<input id="op-start-lon" name="longitude" type="number" inputmode="decimal" step="any" min="-180" max="180" placeholder="101.091000" required aria-describedby="op-start-coordinate-error"></label>
+            </div>
+            <small>องศาทศนิยม (WGS84) · กดใช้พิกัดเพื่อกำหนดจุดเริ่มต้นการเดินทาง</small>
+            <p id="op-start-coordinate-error" class="op-coordinate-error" role="alert" hidden></p>
+            <button type="submit">ใช้พิกัดจุดเริ่มต้นการเดินทาง</button>
+          </fieldset>
+        </form>
+        <div class="op-inline-actions">
+          <button id="op-pick-start" type="button">เลือกจุดเริ่มต้นการเดินทางบนแผนที่</button>
+          <button id="op-auto-start" type="button">Auto</button>
+        </div>
+      </div>
+      <button id="op-route" class="primary wide" type="button">คำนวณ Access / Egress Route</button>
+
+      <div class="op-route-metrics">
+        <div><span>ระยะรวม</span><strong id="op-route-distance">—</strong></div>
+        <div><span>เวลาเข้าโดยประมาณ</span><strong id="op-route-time">—</strong></div><div><span>เวลาออกโดยประมาณ</span><strong id="op-egress-time">—</strong></div>
+        <div><span>ช่วง off-road</span><strong id="op-offroad-distance">—</strong></div>
+        <div><span>Elevation gain</span><strong id="op-elevation-gain">—</strong></div>
+        <div><span>Max grade</span><strong id="op-max-grade">—</strong></div>
+        <div><span>Profile</span><strong id="op-route-profile">—</strong></div>
+      </div>
+      <dl class="op-route-detail">
+        <div><dt>Road mix</dt><dd id="op-route-surface">—</dd></div>
+        <div><dt>OSM road segments</dt><dd id="op-road-count">—</dd></div>
+        <div><dt>Mapped support points</dt><dd id="op-support-count">—</dd></div>
+        <div><dt>Mapped barriers</dt><dd id="op-barrier-count">—</dd></div>
+        <div><dt>Routing data</dt><dd id="op-route-data">กำลังโหลด…</dd></div>
+      </dl>
+      <p class="op-safety-note">เส้นทางนี้เป็น <b>planning route</b> จากข้อมูล OpenStreetMap และแบบจำลองภูมิประเทศ ไม่ใช่คำสั่งเข้าดับไฟ ไม่ยืนยันสภาพถนน ประตูปิด การพังทลาย ไฟจริง ควัน หรือความปลอดภัย ณ เวลาปฏิบัติการ ต้องตรวจหน้างานและใช้ SOP ของหน่วยปฏิบัติ</p>
+    </aside>
+  </div>
+
+  <div class="op-notes">
+    <article><b>3D terrain</b><span>DEM แบบ Terrarium ใช้ยกภูมิประเทศจริง พร้อม hillshade และ contour ที่สร้าง client-side</span></article>
+    <article><b>Access classification</b><span>แยก road / track / path และอ่าน surface, tracktype, access, barrier จาก OSM เมื่อมีการระบุ</span></article>
+    <article><b>Suppression support</b><span>แสดง fire station, hydrant, spring/water และ helipad เฉพาะรายการที่มีการ map ใน OSM; การไม่พบไม่ได้แปลว่าไม่มีในพื้นที่จริง</span></article>
+    <article><b>Slope screening</b><span>layer ความชันเป็น planning-scale grid จาก DEM candidates เพื่อช่วยชี้พื้นที่ชัน ไม่ใช่ slope map สำหรับ tactical movement</span></article>
+  </div>
+</section>
+
+<section class="network-plan network-v4" id="network-plan">
+  <div class="panelhead plan-head">
+    <div>
+      <p class="eyebrow">SENSOR NETWORK PLAN · VERSION 4</p>
+      <h2>DEM-driven sensor placement · Terrain & Risk Network</h2>
+      <span class="muted">คัดเลือก candidate จาก Copernicus DEM GLO-90 + historical hotspot + wind observability + network geometry</span>
+    </div>
+    <div class="plan-actions">
+      <label for="plan-zone" class="sr-only">เลือก planning sector</label>
+      <select id="plan-zone">
+        <option value="ALL">ทุก planning sector</option>
+        <option value="Z-N">Z-N · Northern terrain</option>
+        <option value="Z-C">Z-C · Central corridor</option>
+        <option value="Z-W">Z-W · Western inflow</option>
+      </select>
+      <button id="plan-focus">โฟกัส sector</button>
+      <button id="plan-fit">ดูทั้งหมด</button>
+    </div>
+  </div>
+
+  <div class="plan-metrics" aria-label="สรุปเครือข่ายเซนเซอร์">
+    <div><span>Candidate grid</span><strong id="plan-candidate-count">100</strong><small>ประเมินภูมิประเทศและความเหมาะสมก่อนคัดเลือก</small></div>
+    <div><span>Selected network</span><strong id="plan-selected-count">21</strong><small>ไม่ได้กำหนด 7 จุดต่อ hotspot แบบเดิม</small></div>
+    <div><span>Core deployment</span><strong id="plan-core-count">—</strong><small>คะแนนรวมสูงและเติมข้อมูลเครือข่ายได้มาก</small></div>
+    <div><span>DEM status</span><strong id="plan-dem-metric">…</strong><small id="plan-dem-note">กำลังโหลด Copernicus GLO-90</small></div>
+  </div>
+
+  <div class="plan-layerbar" aria-label="ชั้นข้อมูลวางแผน">
+    <label><input id="plan-heat" type="checkbox" checked> Sensor suitability</label>
+    <label><input id="plan-blind" type="checkbox" checked> Network blind spots</label>
+    <label><input id="plan-source" type="checkbox" checked> Probable source demo</label>
+    <span>Historical hotspot ใช้เพื่อ replay/validation ไม่ใช่ศูนย์กลางวาง sensor</span>
+  </div>
+
+  <div class="plan-zone-summary" id="plan-zone-summary" aria-label="planning sectors และ historical replay"></div>
+  <p class="plan-scope-note" id="plan-scope-note">Version 4 จะดึง elevation จาก Copernicus DEM GLO-90 ผ่าน Open-Meteo Elevation API แล้วคำนวณ slope/aspect proxy ระดับ planning. คะแนน Access และ Communication ยังไม่รวมจนกว่าจะมี road/radio survey; candidate ทั้งหมดไม่ใช่พิกัดก่อสร้าง</p>
+
+  <div class="plan-layout">
+    <div class="plan-map-card">
+      <p id="plan-map-status" class="plan-map-status" role="status" aria-live="polite" data-state="loading">กำลังเตรียมแผนที่และ DEM…</p>
+      <div id="network-map" role="img" aria-label="แผนที่ DEM-driven sensor suitability, blind spots, historical hotspots และ sensor candidates"></div>
+      <div class="plan-legend">
+        <span><i class="plan-dot existing"></i>Sensor เดิม</span>
+        <span><i class="plan-dot proposed"></i>Selected candidate</span>
+        <span><i class="plan-dot hotspot"></i>Historical hotspot</span>
+        <span><i class="plan-dot heat"></i>Suitability grid</span>
+        <span><i class="plan-dot blind"></i>Geometry blind spot</span>
+      </div>
+    </div>
+
+    <aside class="plan-detail" id="plan-detail">
+      <div class="section-label"><span class="status green" id="plan-phase">Core</span><span class="muted" id="plan-kind">Fusion Node</span></div>
+      <h2 id="plan-title">กำลังคำนวณ candidate…</h2>
+      <p id="plan-role">ใช้ DEM + wind + historical risk + network geometry เพื่อเลือกตำแหน่ง</p>
+
+      <div class="plan-score-total">
+        <span>Placement score</span>
+        <strong id="plan-score-total">—</strong>
+        <small id="plan-score-confidence">planning model</small>
+      </div>
+      <div class="plan-score-grid">
+        <div><span>Terrain</span><b id="score-terrain">—</b></div>
+        <div><span>Smoke interception</span><b id="score-smoke">—</b></div>
+        <div><span>Historical risk</span><b id="score-risk">—</b></div>
+        <div><span>Coverage gain</span><b id="score-coverage">—</b></div>
+      </div>
+
+      <dl class="plan-dl">
+        <div><dt>Functional role</dt><dd id="plan-functional-role">—</dd></div>
+        <div><dt>Terrain interpretation</dt><dd id="plan-terrain">—</dd></div>
+        <div><dt>Sensor package</dt><dd id="plan-package">—</dd></div>
+        <div><dt>Candidate coordinate</dt><dd id="plan-coord">—</dd></div>
+        <div><dt>DEM / slope / aspect</dt><dd id="plan-distance">—</dd></div>
+        <div><dt>Field checks still required</dt><dd id="plan-field-check">ถนนเข้าถึง · solar exposure · radio link · จุดติดตั้งจริง</dd></div>
+      </dl>
+      <p class="plan-note">คะแนนเป็น decision-support สำหรับ Demo ไม่ใช่ผล survey. “Blind spot” ในหน้านี้หมายถึงช่องว่างเชิงเรขาคณิตระหว่าง node ไม่ใช่การยืนยันว่าตรวจควันไม่ได้</p>
+    </aside>
+  </div>
+
+  <div class="plan-replay" id="plan-replay">
+    <div>
+      <p class="eyebrow">HISTORICAL REPLAY</p>
+      <h3>ทดสอบ network กับ H-01 / H-02 / H-03</h3>
+      <p>คำนวณ synthetic first-detection จากตำแหน่ง candidate และลมอ้างอิง 261° → 81°. ใช้เปรียบเทียบ configuration เท่านั้น ไม่ใช่เวลาตรวจพบจริงในอดีต</p>
+    </div>
+    <div id="plan-replay-cards" class="plan-replay-cards"></div>
+  </div>
+
+  <div class="plan-table-wrap">
+    <table class="plan-table">
+      <thead><tr><th>จุด</th><th>Sector</th><th>Role</th><th>Phase</th><th>Score</th><th>Terrain</th><th>Sensor package</th><th></th></tr></thead>
+      <tbody id="plan-table-body"></tbody>
+    </table>
+  </div>
+
+  <div class="plan-footnote">
+    <b>Data / limitations:</b>
+    DEM ใช้ Copernicus DEM 2021 GLO-90 ผ่าน Open-Meteo Elevation API (90 m). Historical hotspot H-01–H-03 ใช้เป็น validation events เท่านั้น.
+    Land-cover/road/radio ยังไม่ได้ใช้คำนวณ score ใน Version 4; ต้องเพิ่มก่อนออกแบบก่อสร้างจริง. Existing sensor 3 จุดคงไว้เป็น reference โดย EX-03 ยังเป็นพิกัดประมาณ.
+  </div>
+</section>
+
+
+<details class="method"><summary>ข้อมูลที่ใช้และขอบเขตของเดโม</summary><p>เดโม playback เดิมใช้ Copernicus GLO-30, ESA WorldCover 2021 และ OpenStreetMap ตำแหน่ง Weather 100 และ AQ 100 เป็นจุดเสนอสำหรับเดโม ค่าควัน สถานะการสื่อสาร และลำดับเหตุการณ์สังเคราะห์ทั้งหมด ไม่ได้เชื่อมอุปกรณ์จริง</p><p>Sensor Network Plan ใช้ DEM-driven candidate selection ส่วน Version 6 เพิ่ม 3D terrain, contour, road/track/path, mapped barrier/support point และ Access/Egress routing. ทุกพิกัดและ route ยังเป็น planning support ไม่ใช่ construction coordinate หรือ tactical fire-suppression instruction</p><p>ลม 2.18 m/s จาก 261° มาจาก ERA5 วันที่ 15 มี.ค. 2025 เวลา 14:00 น. เป็นข้อมูลระดับภูมิภาคที่นำมาใช้คงที่ในฉากนี้ ไม่ใช่ลมปัจจุบันหรือการวัดครบ 100 สถานี กติกาควันผิดปกติ: ΔPM2.5 &gt;25 µg/m³ และ ΔCO &gt;0.2 ppm เทียบฐานสมมติ 15 µg/m³ / 0.15 ppm ไม่ใช่เกณฑ์สุขภาพหรือเกณฑ์ปฏิบัติการที่สอบเทียบแล้ว</p><p>โซนสีส้มเป็นกรอบห้อมกลุ่ม AQ ที่ผิดปกติ ไม่ใช่การย้อนคำนวณจุดต้นเพลิง แนวไฟลาม 15/30/60 นาทีเป็นแบบจำลองอย่างง่ายที่ยังไม่สอบเทียบ จึงไม่แสดงเวลาปลอดภัย เส้นทางเข้าดับไฟ หรือค่าความรุนแรงของไฟ</p><p>ข้อมูลเก่าหรือขาดการติดต่อแสดงเป็นสีเทาและไม่นับเป็นหลักฐานยืนยันควัน ต้องแยก “ไม่มีสัญญาณผิดปกติ” ออกจาก “ไม่มีข้อมูล” การรับทราบอยู่เฉพาะหน้านี้และรีเซ็ตเมื่อเปลี่ยนฉาก ยังไม่มีบันทึกเหตุส่วนกลางหรือการแจ้งเตือนจริง</p><p>FIRMS snapshot เดิม 16–23 ก.ย. 2026 ไม่มีจุดในรัศมี 25 กม. จึงไม่นำมาปนกับฉากย้อนหลังนี้ แผนเชื่อมข้อมูลจริง: sensor → LoRaWAN/cellular → MQTT/API → ตรวจคุณภาพและอายุข้อมูล → dashboard ผ่าน SSE/WebSocket โดยต้องเพิ่มบริการรับข้อมูลก่อน</p><p>© OpenStreetMap contributors · © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium · Copernicus DEM · Open-Meteo / ERA5</p><a href="https://registry.opendata.aws/copernicus-dem/">Copernicus DEM</a> · <a href="https://esa-worldcover.org/en/data-access">WorldCover</a> · <a href="https://www.openstreetmap.org/copyright">OSM</a> · <a href="https://open-meteo.com/en/docs/historical-weather-api">ERA5 / Open-Meteo</a></details>
+<footer><span>wildfire v.1 · หน้าจอสาธิตสำหรับเจ้าหน้าที่</span></footer></main>
+<script src="../vendor/leaflet/leaflet.js" crossorigin=""></script>
+<script src="network-plan.js?v=wildfire-v1"></script>
+<script src="sites-reference.js?v=wildfire-v1"></script>
+<script src="presentation-data.js?v=wildfire-v1"></script>
+<script src="../vendor/maplibre/maplibre-gl.js?v=5.6.2"></script>
+<script src="../vendor/contour/index.min.js?v=0.1.0"></script>
+<script src="terrain3d.js?v=wildfire-v1"></script>
+</body></html>
