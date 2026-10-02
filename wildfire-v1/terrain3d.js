@@ -1,6 +1,8 @@
 'use strict';
 (() => {
-  const ROLE_COLOR={RS:'#5b4f81',FU:'#2f765e',WX:'#477aa0',AQ:'#b65b33'};
+  const ROLE_COLOR={RS:'#584f80',FU:'#2e6f5a',RW:'#477aa0',VW:'#6c7d9c',BW:'#8b6e48',AQ:'#b65b33'};
+  const matchesPoint=(kind,role)=>window.ForestWatchPointFilters?.matches(kind,role)!==false;
+  const llText=coordinate=>Number(coordinate[1]).toFixed(6)+', '+Number(coordinate[0]).toFixed(6)+' (WGS84)';
   const MAJOR=new Set(['motorway','trunk','primary','secondary','tertiary']);
   const TRACK=new Set(['track']);
   const PATH=new Set(['path','footway','steps','cycleway','bridleway']);
@@ -140,8 +142,8 @@
     }))};
   }
   function nodeFC(result){
-    return {type:'FeatureCollection',features:(result?.nodes||[]).map((n,i)=>({
-      type:'Feature',properties:{id:'S'+String(i+1).padStart(2,'0'),role:n.role,utility:Math.round(n.utility||0),color:ROLE_COLOR[n.role]||'#355'},
+    return {type:'FeatureCollection',features:(result?.nodes||[]).filter(n=>matchesPoint('sensor',n.roleCode)).map(n=>({
+      type:'Feature',properties:{id:n.id,role:n.roleLabel,roleCode:n.roleCode,phase:n.phase,pkg:n.p.pkg,terrain:n.p.terrainInterpretation,lat:n.p.lat,lon:n.p.lon,elev:n.p.elev,slope:n.p.slope,relief:n.p.relief,utility:Math.round(n.utility||0),color:ROLE_COLOR[n.roleCode]||'#355'},
       geometry:{type:'Point',coordinates:[n.p.lon,n.p.lat]}
     }))};
   }
@@ -152,8 +154,8 @@
     }))};
   }
   function hotspotFC(data){
-    return {type:'FeatureCollection',features:(data.historicalHotspots||[]).map(h=>({
-      type:'Feature',properties:{id:h.id,frp:h.frp,time:h.time},geometry:{type:'Point',coordinates:[h.lon,h.lat]}
+    return {type:'FeatureCollection',features:(data.historicalHotspots||[]).filter(()=>matchesPoint('hotspot')).map(h=>({
+      type:'Feature',properties:{id:h.id,frp:h.frp,time:h.time,lat:h.lat,lon:h.lon},geometry:{type:'Point',coordinates:[h.lon,h.lat]}
     }))};
   }
   function slopeFC(candidates,bounds){
@@ -211,11 +213,12 @@
   function sourceSet(id,data){
     const s=app.map?.getSource(id);if(s)s.setData(data);
     document.getElementById('operational-3d-map')?.setAttribute('data-'+id+'-feature-count',String(data.features?.length||0));
+    if(['sensors','hotspots'].includes(id))document.getElementById('operational-3d-map')?.setAttribute('data-'+id+'-points',JSON.stringify(data.features.map(f=>({id:f.properties.id,lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0],roleCode:f.properties.roleCode}))));
     if(app.flatMap){
       const old=app.flatLayers.get(id);if(old)app.flatMap.removeLayer(old);
       if(['roads','support','barriers','sensors','gateways','hotspots','route','egress','offroad','route-points'].includes(id)){
         const colors={roads:'#85743a',support:'#4aa6b5',barriers:'#c43f35',route:'#238b54',egress:'#27a3ca',offroad:'#d39824',sensors:'#477aa0',gateways:'#756144',hotspots:'#d74a34','route-points':'#d74a34'};
-        const layer=L.geoJSON(data,{filter:f=>id!=='roads'||(['track','path'].includes(f.properties.kind)?document.getElementById('op-tracks')?.checked!==false:document.getElementById('op-roads')?.checked!==false),style:f=>({color:f.properties.blocked?'#cc3f37':colors[id],weight:id==='roads'?2:4,dashArray:id==='egress'||id==='offroad'||['track','path'].includes(f.properties.kind)?'6 5':null}),pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:7,color:'#fff',weight:2,fillColor:f.properties.color||colors[id],fillOpacity:1})});
+        const layer=L.geoJSON(data,{filter:f=>id!=='roads'||(['track','path'].includes(f.properties.kind)?document.getElementById('op-tracks')?.checked!==false:document.getElementById('op-roads')?.checked!==false),style:f=>({color:f.properties.blocked?'#cc3f37':colors[id],weight:id==='roads'?2:4,dashArray:id==='egress'||id==='offroad'||['track','path'].includes(f.properties.kind)?'6 5':null}),pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:7,color:'#fff',weight:2,fillColor:f.properties.color||colors[id],fillOpacity:1}),onEachFeature:(f,layer)=>{if(['sensors','hotspots'].includes(id)){const detail=document.createElement('div');detail.textContent=[f.properties.id,f.properties.role,f.properties.terrain,f.properties.pkg,llText(f.geometry.coordinates)].filter(Boolean).join(' · ');layer.bindPopup(detail);}}});
         const on=['sensors','gateways'].includes(id)?document.getElementById('op-assets')?.checked!==false:['support','barriers'].includes(id)?document.getElementById('op-support')?.checked===true:['route','egress','offroad','route-points'].includes(id)?document.getElementById('op-route-layer')?.checked!==false:true;
         if(on)layer.addTo(app.flatMap);
         app.flatLayers.set(id,layer);
@@ -277,8 +280,8 @@
     if(sel.startsWith('H-')){
       const h=app.state.data.historicalHotspots.find(x=>x.id===sel);return h?{id:h.id,lat:h.lat,lon:h.lon,type:'fire'}:null;
     }
-    if(sel.startsWith('S')){
-      const idx=Number(sel.slice(1))-1,n=app.state.result.nodes[idx];return n?{id:sel,lat:n.p.lat,lon:n.p.lon,type:'sensor'}:null;
+    if(sel.startsWith('N')){
+      const n=app.state.result.nodes.find(n=>n.id===sel);return n?{id:n.id,lat:n.p.lat,lon:n.p.lon,type:'sensor'}:null;
     }
     return null;
   }
@@ -289,8 +292,8 @@
     for(const h of app.state.data.historicalHotspots||[]){
       const o=document.createElement('option');o.value=h.id;o.textContent=h.id+' · Historical fire / hotspot';sel.appendChild(o);
     }
-    (app.state.result.nodes||[]).forEach((n,i)=>{
-      const o=document.createElement('option');o.value='S'+String(i+1).padStart(2,'0');o.textContent=o.value+' · '+n.role+' site';sel.appendChild(o);
+    (app.state.result.nodes||[]).forEach(n=>{
+      const o=document.createElement('option');o.value=n.id;o.textContent=n.id+' · '+n.roleLabel;sel.appendChild(o);
     });
     const custom=document.createElement('option');custom.value='CUSTOM';custom.textContent='Custom fire point · กรอกพิกัดหรือคลิกบนแผนที่';sel.appendChild(custom);
     if([...sel.options].some(o=>o.value===old))sel.value=old;
@@ -317,7 +320,8 @@
     app.existingMarkers=(state.data.existing||[]).map(sensor=>{
       const label=document.createElement('span');label.className='map-sensor existing';label.textContent=sensor.id;label.title=sensor.note;
       const detail=document.createElement('div');detail.textContent=sensor.id+' · เซ็นเซอร์เดิม · '+sensor.note;
-      label.style.display=document.getElementById('op-assets')?.checked===false?'none':'';
+      label.dataset.siteId=sensor.id;label.dataset.lat=sensor.lat;label.dataset.lon=sensor.lon;label.dataset.roleCode='EX';
+      label.style.display=document.getElementById('op-assets')?.checked===false||!matchesPoint('sensor','EX')?'none':'';
       return new maplibregl.Marker({element:label}).setLngLat([sensor.lon,sensor.lat]).setPopup(new maplibregl.Popup({maxWidth:'300px'}).setDOMContent(detail)).addTo(app.map);
     });}
     setText('op-road-count',(state.osm.segments||[]).length.toLocaleString('th-TH'));
@@ -423,7 +427,8 @@
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'OpenStreetMap contributors'}).addTo(app.flatMap);
     app.existingMarkers=(state.data.existing||[]).map(sensor=>{
       const label=document.createElement('span');label.className='map-sensor existing';label.textContent=sensor.id;
-      return L.marker([sensor.lat,sensor.lon],{icon:L.divIcon({className:'plan-leaflet-icon',html:label.outerHTML,iconSize:[34,34]})}).addTo(app.flatMap);
+      label.dataset.siteId=sensor.id;label.dataset.lat=sensor.lat;label.dataset.lon=sensor.lon;label.dataset.roleCode='EX';
+      return L.marker([sensor.lat,sensor.lon],{icon:L.divIcon({className:'plan-leaflet-icon',html:label.outerHTML,iconSize:[34,34],iconAnchor:[17,17]})}).addTo(app.flatMap).bindPopup(sensor.id+' · '+sensor.note+' · '+sensor.lat.toFixed(6)+', '+sensor.lon.toFixed(6));
     });
     app.flatMap.on('click',e=>{if(app.pickMode)setCoordinatePoint(app.pickMode,[e.latlng.lat,((e.latlng.lng+180)%360+360)%360-180]);});
     ['sensors','gateways','hotspots'].forEach(id=>sourceSet(id,id==='sensors'?nodeFC(state.result):id==='gateways'?gatewayFC(state.result):hotspotFC(state.data)));
@@ -446,6 +451,7 @@
     syncLayerToggles();
   }
   function syncLayerToggles(){
+    if(app.state){sourceSet('sensors',nodeFC(app.state.result));sourceSet('hotspots',hotspotFC(app.state.data));}
     if(app.flatMap&&app.state)sourceSet('roads',lineFC(app.state.osm.segments||[]));
     visible('contour-minor',document.getElementById('op-contours')?.checked!==false);
     visible('hillshade',app.terrainAvailable&&document.getElementById('op-hillshade')?.checked!==false);
@@ -454,18 +460,24 @@
     visible('roads-casing',roads);visible('roads',roads);visible('blocked-access',roads);
     const tracks=document.getElementById('op-tracks')?.checked!==false;
     visible('tracks',tracks);visible('paths',tracks);
-    const sup=document.getElementById('op-support')?.checked===true;
+    const sup=document.getElementById('op-support')?.checked===true&&matchesPoint('support');
     visible('support',sup);visible('barriers',sup);
     const assets=document.getElementById('op-assets')?.checked!==false;
-    visible('sensors',assets);visible('gateways',assets);
-    app.existingMarkers.forEach(marker=>marker.getElement().style.display=assets?'':'none');
+    visible('sensors',assets);visible('gateways',assets&&matchesPoint('gateway'));visible('hotspots',matchesPoint('hotspot'));
+    app.existingMarkers.forEach(marker=>marker.getElement().style.display=assets&&matchesPoint('sensor','EX')?'':'none');
     const route=document.getElementById('op-route-layer')?.checked!==false;
-    visible('route-casing',route);visible('route',route);visible('egress-casing',route);visible('egress',route);visible('offroad',route);visible('route-points',route);
+    visible('route-casing',route);visible('route',route);visible('egress-casing',route);visible('egress',route);visible('offroad',route);visible('route-points',route&&matchesPoint('route-point'));
     if(app.flatMap){
       for(const [id,layer] of app.flatLayers){
-        const on=['sensors','gateways'].includes(id)?assets:['support','barriers'].includes(id)?sup:['route','egress','offroad','route-points'].includes(id)?route:true;
+        const on=id==='sensors'?assets:id==='gateways'?assets&&matchesPoint('gateway'):id==='hotspots'?matchesPoint('hotspot'):['support','barriers'].includes(id)?sup:id==='route-points'?route&&matchesPoint('route-point'):['route','egress','offroad'].includes(id)?route:true;
         if(on&&!app.flatMap.hasLayer(layer))layer.addTo(app.flatMap);else if(!on&&app.flatMap.hasLayer(layer))app.flatMap.removeLayer(layer);
       }
+    }
+    if(app.state){
+      const sensorCount=assets?nodeFC(app.state.result).features.length+(app.state.data.existing||[]).filter(()=>matchesPoint('sensor','EX')).length:0;
+      const hotspotCount=hotspotFC(app.state.data).features.length;
+      setText('op-point-count',(sensorCount+hotspotCount)+' จุด · Sensor '+sensorCount+' · Hotspot '+hotspotCount);
+      document.getElementById('operational-3d-map')?.setAttribute('data-existing-visible-count',String(assets&&matchesPoint('sensor','EX')?(app.state.data.existing||[]).length:0));
     }
   }
 
@@ -481,6 +493,9 @@
     if(p.tracktype)bits.push('track '+p.tracktype);
     if(p.access)bits.push('access '+p.access);
     if(p.role)bits.push('role '+p.role);
+    if(p.terrain)bits.push(p.terrain);
+    if(p.pkg)bits.push(p.pkg);
+    if(Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon)))bits.push(Number(p.lat).toFixed(6)+', '+Number(p.lon).toFixed(6)+' (WGS84)');
     if(p.frp)bits.push('FRP '+p.frp);
     if(p.kind&&!p.hw)bits.push(p.kind);
     body.textContent=bits.join(' · ')||'OSM / planning feature';
@@ -537,6 +552,7 @@
     sourceSet('route-points',pointFC([
       {coord:startCoord,properties:{kind:'start'}},{coord:[target.lat,target.lon],properties:{kind:'target'}}
     ]));
+    syncLayerToggles();
     if(app.flatMap)app.flatMap.fitBounds(L.latLngBounds(fullCoords),{padding:[35,35],maxZoom:16});
     app.map?.fitBounds([[Math.min(...fullCoords.map(p=>p[1])),Math.min(...fullCoords.map(p=>p[0]))],[Math.max(...fullCoords.map(p=>p[1])),Math.max(...fullCoords.map(p=>p[0]))]],{padding:70,pitch:54,bearing:-16,duration:700});
     const types={};route.edges.forEach(e=>{types[e.seg.hw]=(types[e.seg.hw]||0)+e.km;});
@@ -596,6 +612,7 @@
     if(!app.initialized)init(state);else updateOperationalData(state);
   }
   bindControls();
+  window.ForestWatchPointFilters?.subscribe(()=>{if(app.state)syncLayerToggles();});
   if(window.ForestWatchPresentationState)handle(window.ForestWatchPresentationState);
   window.addEventListener('forestwatch:v1-ready',e=>handle(e.detail));
 })();

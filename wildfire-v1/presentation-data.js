@@ -7,39 +7,36 @@
   const coordinate=p=>p&&Number.isFinite(p.lat)&&Number.isFinite(p.lon)&&Math.abs(p.lat)<=90&&Math.abs(p.lon)<=180;
   const number=(v,fallback=0)=>Number.isFinite(v)?v:fallback;
 
-  function siteReference(){
-    const reference=window.ForestWatchSiteReference;
-    if(!reference)return {nodes:[],gateways:[],provenance:{status:'unavailable',source:'Preserved v0 site reference unavailable; no replacement network generated'}};
-    // Whitelist spatial and scientific attributes; the customer page never imports financial logic.
-    const point=p=>{
-      const out={lat:p.lat,lon:p.lon};
-      ['elev','slope','aspect','relief','score','riskScore','smokeScore','terrainScore','boundaryScore','coverageScore','ridgeScore','valleyScore','accessScore','roadDistanceKm','backhaulScore','fuelScore','landcoverSiteScore','landcover','landcoverCode','landcoverColor'].forEach(key=>{if(p[key]!=null)out[key]=p[key];});
-      return out;
-    };
-    const nodes=(reference.nodes||[]).filter(n=>coordinate(n.p)).map(n=>({p:point(n.p),role:n.role,utility:number(n.utility)}));
-    const gateways=(reference.gateways||[]).filter(g=>coordinate(g.p)).map(g=>({id:g.id,p:point(g.p),score:number(g.score),coverIdx:Array.isArray(g.coverIdx)?g.coverIdx.filter(Number.isInteger):[]}));
-    return {nodes,gateways,provenance:{status:nodes.length?'ready':'unavailable',source:'v0 default demonstration reference using its documented fallback; positions remain fixed',...(reference.provenance||{})}};
+  function selectedNetwork(){
+    const data=state.data;
+    const nodes=(data.selected||[]).filter(coordinate).map(p=>({
+      id:p.id,p:{...p},role:p.roleCode,roleCode:p.roleCode,roleLabel:p.role,roleDesc:p.roleDesc,phase:p.phase,utility:number(p.score)
+    }));
+    return {nodes,gateways:[],provenance:{
+      status:nodes.length?'ready':'unavailable',source:'Current Network Plan selection shared by 2D and 3D',
+      planRevision:data.planRevision,updatedAt:data.updatedAt,terrainStatus:data.demStatus
+    }};
   }
 
   function publish(){
     if(!state.data)return;
-    const reference=siteReference();
+    const network=selectedNetwork();
     const payload={
       data:state.data,candidates:state.data.candidates||[],osm:state.osm,
-      result:{nodes:reference.nodes,gateways:reference.gateways},
+      result:{nodes:network.nodes,gateways:network.gateways},
       osmOK:state.osm.segments.length>0,
-      provenance:{network:state.data.provenance,sites:reference.provenance,roads:{...state.roads},support:{...state.support}}
+      provenance:{network:state.data.provenance,sites:network.provenance,roads:{...state.roads},support:{...state.support}}
     };
     window.ForestWatchPresentationState=payload;
     window.dispatchEvent(new CustomEvent('forestwatch:v1-ready',{detail:payload}));
     const label=document.getElementById('v1-data-status');
     if(label){
       const describe=(name,info)=>name+' '+(info.status==='ready'?'OSM ล่าสุด':info.source==='cache'?'OSM ที่บันทึกไว้'+(info.status==='loading'?' · กำลังอัปเดต':' · อัปเดตไม่สำเร็จ'):info.status==='loading'?'กำลังโหลด':'ไม่พร้อม');
-      label.textContent=describe('ถนน/ทาง',state.roads)+' · '+describe('จุดสนับสนุน/สิ่งกีดขวาง',state.support)+' · จุดอ้างอิงสาธิต '+reference.nodes.length+' จุดจาก v0';
+      label.textContent=describe('ถนน/ทาง',state.roads)+' · '+describe('จุดสนับสนุน/สิ่งกีดขวาง',state.support)+' · Network Plan '+network.nodes.length+' จุดชุดเดียวกับแผนที่ 2D';
       label.dataset.state=payload.osmOK?'ready':state.roads.status==='loading'?'loading':'error';
     }
     const siteLabel=document.getElementById('v1-site-provenance');
-    if(siteLabel)siteLabel.textContent=reference.nodes.length?'จุดเสนอและ gateway ใช้ชุดอ้างอิงสาธิต v0 จากค่า fallback เดิม · คงพิกัดเดิม':'ยังไม่มีชุดจุดเสนออ้างอิง v0 · ไม่สร้างจุดทดแทน';
+    if(siteLabel)siteLabel.textContent=network.nodes.length?'ใช้จุด N01–N21 และบทบาทตรงกับ Network Plan · '+(state.data.demLoaded?(state.data.demStatus==='cached'?'DEM ที่บันทึกไว้':'DEM ล่าสุด'):'wind/risk/geometry fallback'):'ยังไม่มีข้อมูล Network Plan · ไม่สร้างจุดทดแทน';
   }
 
   function cacheKey(kind,bounds){
@@ -165,11 +162,5 @@
     }else publish();
   }
   window.addEventListener('forestwatch:v4-ready',event=>receiveData(event.detail));
-  window.addEventListener('forestwatch:v1-sites-ready',publish);
-  if(window.ForestWatchSiteReference?.data)receiveData({
-    ...window.ForestWatchSiteReference.data,
-    demLoaded:false,demStatus:'reference',
-    provenance:{terrain:{source:'v0 demonstration fallback; elevation is unavailable',status:'reference'},network:'v0 default demonstration spatial reference'}
-  });
   if(window.ForestWatchNetworkV4)receiveData(window.ForestWatchNetworkV4);
 })();
