@@ -75,7 +75,9 @@ console.log('PASS: the V2 working tree and shared root/runtime/vendor assets mat
 for (const file of ['fire-model.js', 'fire-worker.js', 'network-plan.js', 'point-filters.js', 'presentation-data.js']) {
   assertBaseline('wildfire-v3/' + file, 'wildfire-v2/' + file);
 }
-assertBaseline('wildfire-v3/style.css', 'style.css');
+// The preserved root blob has mixed CRLF/LF. Git normalizes the new V3 copy when committed;
+// compare its text to the root file already validated above, allowing only CRLF → LF.
+assert.equal(read('wildfire-v3/style.css').replace(/\r\n/g, '\n'), read('style.css').replace(/\r\n/g, '\n'), 'V3 base style must match the preserved root style apart from checkout line endings');
 console.log('PASS: V3 keeps the original model, worker protocol, Network Plan, filters, data, and base style.');
 
 const dependencies = new Set();
